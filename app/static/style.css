@@ -85,6 +85,15 @@ input[type=text], input[type=password], select, textarea { padding: .4rem .6rem;
 .countdown.late { background: var(--text); color: #FFFFFF; border-radius: 8px; padding: 0 .5rem; }
 .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
 
+/* --- the four steps of a case: the current one is filled, the others are outlined --- */
+.progress { list-style: none; display: flex; flex-wrap: wrap; gap: .4rem; padding: 0; margin: .5rem 0; }
+.step { border: 2px solid var(--muted); color: var(--muted); background: var(--card); border-radius: 999px; padding: 0 .8rem; font-weight: 500; white-space: nowrap; }
+.step-done { border-color: var(--text); color: var(--text); }                       /* behind us: a dark outline */
+.step-current { border-color: var(--text); background: var(--text); color: #FFFFFF; font-weight: 700; }
+.step-current.step-closed { border-color: var(--done); background: var(--done); }    /* green means closed */
+.board .progress { font-size: 1.125rem; }
+.bubble .progress { margin: .6rem 0 .1rem; }
+
 /* --- the board. Its sizes are the brief's sizes at scale 1; the operator page scales them for the hall. --- */
 html.board-root { font-size: calc(16px * var(--board-scale, 1)); }
 .board-page main { padding: 0 1.5rem 2rem; }

@@ -1,0 +1,9 @@
+{# The row of four steps of a case. The current step is filled, the others are outlined.
+   Colour is never the only sign: every step says its state in words for a screen reader. #}
+{% macro progress(steps, title) %}
+<ol class="progress" aria-label="{{ title }}">
+  {% for step in steps %}
+  <li class="step step-{{ step.state }} step-{{ step.key }}"{% if step.state == "current" %} aria-current="step"{% endif %}>{{ step.label }}<span class="visually-hidden"> ({{ copy.STEP_STATES[step.state] }})</span></li>
+  {% endfor %}
+</ol>
+{% endmacro %}

@@ -265,6 +265,8 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
             "message": message,
             "type": report.type,
             "question": {"text": question.text, "options": list(question.options)} if question else None,
+            # Status back to the sender: the steps of the case the report is in (no names, no text).
+            "steps": store.steps(case_id) if case_id is not None else None,
         }
 
     @app.post("/api/reports")
@@ -289,6 +291,19 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         except NoSuchCase:
             return problem(404, copy.NOT_FOUND)
         return answer_for(report_id, case_id, report, joined)
+
+    @app.get("/api/reports/{report_id}/status")
+    def report_status(report_id: int):
+        """For the sender's phone: the steps of the case their report is in now. Nothing else."""
+        status = store.report_status(report_id)
+        if status is None:
+            return problem(404, copy.NOT_FOUND)
+        return {"case_id": status[0], "steps": status[1]}
+
+    @app.get("/api/cases/{case_id}/steps")
+    def case_steps(case_id: int):
+        """Each step the case reached, with its time and who did it."""
+        return {"steps": store.step_record(case_id)}
 
     @app.post("/api/cases/{case_id}/card")
     def show_card(case_id: int, photo: UploadFile = File(...)):
@@ -554,7 +569,7 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         question = body.get("question") or {}
         return page(
             request, "report.html", hotel=listed_hotel(hotel) or "", hotels=HOTELS,
-            reply=body.get("message"), heard=body.get("heard"), question=question.get("text"),
+            reply=body.get("message"), heard=body.get("heard"), question=question.get("text"), steps=body.get("steps"),
         )  # fmt: skip
 
     @app.get("/before-after", response_class=HTMLResponse)

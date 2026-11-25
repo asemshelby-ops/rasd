@@ -2,6 +2,7 @@
 {% block title %}{{ copy.REPORT_TITLE }}{% endblock %}
 {% block body_class %}report-page{% endblock %}
 {# A messaging app: the hotel on top, the messages in the middle, the message box and the record button at the bottom. #}
+{% from "progress.html" import progress with context %}
 {% block header %}{% endblock %}
 {% block main %}
 {# A real form: with no script at all the browser posts it and the answer comes back in this page. #}
@@ -19,7 +20,7 @@
 <h1 class="visually-hidden">{{ copy.REPORT_TITLE }}</h1>
 <ol id="chat" class="chat" aria-live="polite" aria-label="الرسائل">
   {% if heard %}<li class="bubble mine" dir="auto">{{ copy.HEARD }}: {{ heard }}</li>{% endif %}
-  {% if reply %}<li class="bubble theirs" dir="auto">{{ reply }}{% if question %}<br><strong>{{ copy.QUESTION_FROM_RASD }}: {{ question }}</strong>{% endif %}</li>{% endif %}
+  {% if reply %}<li class="bubble theirs" dir="auto">{{ reply }}{% if question %}<br><strong>{{ copy.QUESTION_FROM_RASD }}: {{ question }}</strong>{% endif %}{% if steps %}{{ progress(steps, copy.YOUR_REPORT_STEPS) }}{% endif %}</li>{% endif %}
 </ol>
 <p id="report-message" class="message" role="alert" hidden></p>
 <p class="resend-row"><button type="button" id="resend" hidden>{{ copy.RESEND }}</button></p>
@@ -60,7 +61,8 @@
 <script>window.RASD = {{ {
   "sendFailed": copy.SEND_FAILED, "resend": copy.RESEND, "micBlocked": copy.MIC_BLOCKED,
   "record": copy.RECORD, "stopAndSend": copy.STOP_AND_SEND, "heard": copy.HEARD, "empty": copy.EMPTY_MESSAGE,
-  "mockCard": copy.MOCK_CARD_NOTE, "wrong": copy.SOMETHING_WRONG
+  "mockCard": copy.MOCK_CARD_NOTE, "wrong": copy.SOMETHING_WRONG,
+  "stepsTitle": copy.YOUR_REPORT_STEPS, "stepStates": copy.STEP_STATES
 } | tojson }};</script>
 <script src="/static/report.js"></script>
 {% endblock %}

@@ -1,4 +1,5 @@
 {# One card. large: the bigger card of the critical band. Nothing private is in a case: see Store.board. #}
+{% from "progress.html" import progress with context %}
 {% macro card(case, large=False) %}
 <article class="case priority-{{ case.priority }}{{ " big" if large }}" data-case="{{ case.id }}" data-state="{{ case.state }}" data-state-label="{{ case.state_label }}" data-count="{{ case.count }}" aria-label="{{ case.label }}، {{ case.type }}، الأولوية {{ case.priority_label }}">
   <header class="case-head">
@@ -10,6 +11,7 @@
   <h3 class="case-type">{{ case.type }}</h3>
   <p class="case-place">{{ case.place }}</p>
   <p class="case-owner">إلى: {{ case.owner }}</p>
+  {{ progress(case.steps, copy.STEPS_TITLE) }}
   {% if case.count > 1 %}
   <p class="stamp">{{ case.count_text }}{% for language in case.languages %} <span class="language-chip">{{ language }}</span>{% endfor %}</p>
   {% endif %}
@@ -32,7 +34,7 @@
   {% if case.replacement_due %}<p class="case-note"><a href="/cases/{{ case.id }}/replacement">{{ copy.OPEN_REQUEST }}</a></p>{% endif %}
   <div class="actions">
     {% if case.waiting %}<button type="button" data-action="confirm" data-case="{{ case.id }}">{{ copy.CONFIRM }}</button>{% endif %}
-    {% if case.acknowledge_due and not case.acknowledged %}<button type="button" data-action="acknowledge" data-case="{{ case.id }}">{{ copy.ACKNOWLEDGE }}</button>{% endif %}
+    {% if not case.acknowledged and (not case.waiting or case.acknowledge_due) %}<button type="button" data-action="acknowledge" data-case="{{ case.id }}">{{ copy.ACKNOWLEDGE }}</button>{% endif %}
     <button type="button" class="close" data-action="close" data-case="{{ case.id }}">{{ copy.CLOSE }}</button>
   </div>
   {% endif %}

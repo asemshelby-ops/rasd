@@ -27,6 +27,13 @@ STATES = {
     "closed": "مغلقة",
 }
 NO_CASES = "لا حالات هنا الآن."
+# The four steps every case goes through, in order. The board and the sender see the same steps.
+STEPS = {"received": "وصل البلاغ", "assigned": "أُسند إلى الجهة", "in_progress": "قيد المعالجة", "closed": "أُغلقت"}
+STEPS_TITLE = "مراحل الحالة"
+YOUR_REPORT_STEPS = "مراحل بلاغك"
+STEP_STATES = {"done": "تمّت", "current": "المرحلة الحالية", "todo": "لم تبدأ"}
+STEP_BY_SENDER = "المرسل"
+STEP_BY_RASD = "رصد"
 # The board's layout: a band for critical cases, then three columns.
 SECTIONS = {"critical": "حالات حرجة", "now": "الآن", "late": "تجاوزت الموعد", "closed": "مغلقة"}
 NO_CRITICAL = "لا حالة حرجة الآن."

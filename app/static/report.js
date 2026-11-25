@@ -49,6 +49,51 @@
   }
   resend.addEventListener("click", function () { if (lastSend) { lastSend(); } });
 
+  // Status back to the sender: under their report, the four steps of the case it is in.
+  // The row is drawn from what the server says and asked for again every few seconds, until the case is closed.
+  var followed = {}; // report number -> true while its case is still open
+
+  function drawSteps(holder, steps) {
+    holder.textContent = "";
+    var row = document.createElement("ol");
+    row.className = "progress";
+    row.setAttribute("aria-label", T.stepsTitle);
+    steps.forEach(function (step) {
+      var item = document.createElement("li");
+      item.className = "step step-" + step.state + " step-" + step.key;
+      if (step.state === "current") { item.setAttribute("aria-current", "step"); }
+      item.textContent = step.label;
+      var said = document.createElement("span");
+      said.className = "visually-hidden";
+      said.textContent = " (" + T.stepStates[step.state] + ")";
+      item.appendChild(said);
+      row.appendChild(item);
+    });
+    holder.appendChild(row);
+  }
+
+  function showSteps(reply, reportId, steps) {
+    var old = chat.querySelector('[data-steps-of="' + reportId + '"]');
+    if (old) { old.remove(); } // one row for one report: it moves under the latest answer
+    var holder = document.createElement("div");
+    holder.setAttribute("data-steps-of", reportId);
+    reply.appendChild(holder);
+    drawSteps(holder, steps);
+    followed[reportId] = steps[steps.length - 1].state !== "current";
+  }
+
+  setInterval(function () {
+    Object.keys(followed).forEach(function (reportId) {
+      if (!followed[reportId]) { return; }
+      fetch("/api/reports/" + reportId + "/status").then(function (r) { return r.ok ? r.json() : null; }).then(function (status) {
+        var holder = chat.querySelector('[data-steps-of="' + reportId + '"]');
+        if (!status || !holder) { return; }
+        drawSteps(holder, status.steps);
+        followed[reportId] = status.steps[status.steps.length - 1].state !== "current";
+      }).catch(function () { /* the network dropped: the next round asks again */ });
+    });
+  }, 3000);
+
   function show(result) {
     if (!result.ok) { say((result.data && result.data.message) || T.wrong); return; }
     say("");
@@ -60,6 +105,7 @@
     // The card step is now possible: one suggestion button appears above the text box. The "+" stays closed.
     if (data.type === "lost_pilgrim") { cardButton.hidden = false; }
     if (data.question) { ask(reply, data); }
+    if (data.steps) { showSteps(reply, data.report_id, data.steps); }
   }
 
   function ask(reply, data) {

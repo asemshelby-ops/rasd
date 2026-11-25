@@ -39,6 +39,7 @@ create table if not exists private_numbers (
     id integer primary key, report_id integer, case_id integer, kind text, value text);
 create table if not exists notifications (id integer primary key, case_id integer, at text, text text);
 create table if not exists settings (name text primary key, value text);
+create table if not exists steps (case_id integer, step text, at text, who text, primary key (case_id, step));
 """
 
 # How a report reached us. "saved" is a voice note the operator sent from the saved scene files.
@@ -72,6 +73,22 @@ def _screen_hotel(hotel: str | None) -> str | None:
     """A hotel as the big screen may show it. A name that is not in the team's list is words
     from a message (it could be a person's name), so the screen only says that it is not listed."""
     return hotel if hotel is None or hotel in HOTELS else copy.UNLISTED_HOTEL
+
+
+def _steps_view(reached: dict[str, str]) -> list[dict]:
+    """The four steps with their state. reached: step -> when. The furthest step reached is the current one;
+    a step that was skipped on the way (closed without being acknowledged) counts as done, with no time."""
+    keys = list(copy.STEPS)
+    current = max((keys.index(step) for step in reached), default=0)
+    return [
+        {
+            "key": key,
+            "label": copy.STEPS[key],
+            "state": "current" if index == current else ("done" if index < current else "todo"),
+            "at": reached.get(key),
+        }
+        for index, key in enumerate(keys)
+    ]
 
 
 def _incident_to_json(incident: Incident) -> str:
@@ -111,7 +128,7 @@ class Store:
     def clear(self) -> None:
         """Empties the board between two demos. Settings (the live or replay mode) stay."""
         with self.lock, self.db:
-            for table in ("reports", "cases", "events", "private_numbers", "notifications"):
+            for table in ("reports", "cases", "events", "private_numbers", "notifications", "steps"):
                 self.db.execute(f"delete from {table}")
 
     def open_lost_pilgrim_case(self) -> int | None:
@@ -160,6 +177,10 @@ class Store:
                     (_incident_to_json(incident), int(report.needs_confirmation)),
                 ).lastrowid
             self.db.execute("update reports set case_id = ? where id = ?", (case_id, report_id))
+            if not joined:
+                self._step(case_id, "received", received_at, "sender")
+                if not report.needs_confirmation:  # nothing to confirm: Rasd assigns it to its owner at once
+                    self._step(case_id, "assigned", received_at, "rasd")
             self._absorb(case_id, report, received_at)
             for kind in ("passport", "visa", "other"):
                 for value in getattr(private, kind):
@@ -187,6 +208,35 @@ class Store:
                 "missing": list(request.missing),
             }
             self.db.execute("update cases set replacement = ? where id = ?", (json.dumps(saved, ensure_ascii=False), case_id))
+
+    def _step(self, case_id: int, step: str, at: datetime, who: str) -> None:
+        """Records that a case reached a step (copy.STEPS), when, and who did it. The first time counts."""
+        self.db.execute(
+            "insert or ignore into steps (case_id, step, at, who) values (?, ?, ?, ?)",
+            (case_id, step, at.isoformat(timespec="seconds"), who),
+        )
+
+    def step_record(self, case_id: int) -> list[dict]:
+        """The steps a case has reached, in order, each with its time and who did it."""
+        with self.lock:
+            rows = self.db.execute("select step, at, who from steps where case_id = ?", (case_id,)).fetchall()
+        names = {"sender": copy.STEP_BY_SENDER, "rasd": copy.STEP_BY_RASD}
+        found = {row["step"]: {"step": row["step"], "at": row["at"], "who": names.get(row["who"], row["who"])} for row in rows}
+        return [found[step] for step in copy.STEPS if step in found]
+
+    def steps(self, case_id: int) -> list[dict]:
+        """The four steps of a case as the board and the sender see them: which are done, which is the
+        current one, and when each was reached. No names: who did a step is in step_record()."""
+        reached = {entry["step"]: entry["at"] for entry in self.step_record(case_id)}
+        return _steps_view(reached)
+
+    def report_status(self, report_id: int) -> tuple[int, list[dict]] | None:
+        """For the sender: the case their report belongs to NOW (also after a merge), and its steps."""
+        with self.lock:
+            row = self.db.execute("select case_id from reports where id = ?", (report_id,)).fetchone()
+        if row is None or row["case_id"] is None:
+            return None
+        return row["case_id"], self.steps(row["case_id"])
 
     def _log(self, case_id: int, at: datetime, who: str, what: str) -> None:
         self.db.execute(
@@ -223,6 +273,7 @@ class Store:
             value = report_id if table == "reports" else case_id
             self.db.execute(f"update {table} set case_id = ? where {column} = ?", (target, value))
         self.db.execute("delete from cases where id = ?", (case_id,))
+        self.db.execute("delete from steps where case_id = ?", (case_id,))  # the removed card's steps go with it
         return target
 
     def answer_question(self, report_id: int, reply: str, at: datetime) -> tuple[Understanding, int | None, bool]:
@@ -267,6 +318,8 @@ class Store:
                     target = self._join_open_case(case_id, report_id, completed)
                     if target is not None:
                         case_id, joined = target, True
+                if not joined and incident.report_ids == [report_id] and not completed.needs_confirmation:
+                    self._step(case_id, "assigned", at, "rasd")  # the answer completed it: assigned to its owner
                 self._absorb(case_id, completed, at)
                 self._log(case_id, at, "sender", "answered")
             return completed, case_id, joined
@@ -284,6 +337,7 @@ class Store:
         with self.lock, self.db:
             self._incident(case_id)
             self.db.execute("update cases set waiting = 0 where id = ?", (case_id,))
+            self._step(case_id, "assigned", at, who)
             rows = self.db.execute("select received_at, report from reports where case_id = ? order by id", (case_id,)).fetchall()
             for row in rows:
                 confirmed = replace(_report_from_json(row["report"]), needs_confirmation=False)
@@ -308,6 +362,7 @@ class Store:
             ).rowcount
             if changed:  # the first acknowledgement is the one that counts, and the only one logged
                 self._log(case_id, at, who, "acknowledged")
+                self._step(case_id, "in_progress", at, who)
 
     def close(self, case_id: int, who: str, at: datetime) -> None:
         """Closes a case through the one close action, which records the time and who closed it."""
@@ -318,6 +373,7 @@ class Store:
             close_incident(incident, closed_by=who, at=at)
             self.db.execute("update cases set incident = ? where id = ?", (_incident_to_json(incident), case_id))
             self._log(case_id, at, incident.closed_by, "closed")
+            self._step(case_id, "closed", at, incident.closed_by)
 
     def identify(self, case_id: int, name: str, visa_number: str, record, at: datetime) -> str:
         """Records who the pilgrim is (from the simulated lookup) and the simulated notification. Returns its text."""
@@ -347,14 +403,23 @@ class Store:
             rows = self.db.execute("select * from cases order by id").fetchall()
             saved = self.db.execute("select distinct case_id from reports where source = ?", (SAVED_SOURCE,)).fetchall()
             spoken = self.db.execute("select case_id, language from reports where language is not null order by id").fetchall()
+            stepped = self.db.execute("select case_id, step, at from steps").fetchall()
         from_saved = {row["case_id"] for row in saved}
         languages: dict[int, list[str]] = {}
         for row in spoken:  # each language once, in the order the reports came
             names = languages.setdefault(row["case_id"], [])
             if row["language"] in copy.LANGUAGES and copy.LANGUAGES[row["language"]] not in names:
                 names.append(copy.LANGUAGES[row["language"]])
+        reached: dict[int, dict[str, str]] = {}
+        for row in stepped:
+            reached.setdefault(row["case_id"], {})[row["step"]] = row["at"]
         cases = [
-            {**self._public(row, now), "from_saved": row["id"] in from_saved, "languages": languages.get(row["id"], [])}
+            {
+                **self._public(row, now),
+                "from_saved": row["id"] in from_saved,
+                "languages": languages.get(row["id"], []),
+                "steps": _steps_view(reached.get(row["id"], {})),
+            }
             for row in rows
         ]
         order = list(URGENCIES)

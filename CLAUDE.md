@@ -14,11 +14,11 @@ these before changing anything:
 
 - `MORNING_REPORT.md` (Arabic): the report to the owner, with what is needed from them.
 - `PROGRESS.md`: what each stage did, test counts, measurements, API spending.
-- `QUESTIONS.md`: the 99 choices made without the owner, numbered. The owner
+- `QUESTIONS.md`: the 105 choices made without the owner, numbered. The owner
   has not yet confirmed them, except the three listed below. Treat the rest as provisional.
 - `DEMO.md` (Arabic): demo-day guide. `WHATSAPP_COUNT.md` (Arabic): the counting tool.
 
-What exists (929 tests, `python -m pytest`, no key and no network needed):
+What exists (950 tests, `python -m pytest`, no key and no network needed):
 
 - `rasd/`: the rules. The model READS a message (`understand.py`); the team's
   tables DECIDE owner, priority and deadlines (`routing.py`); our code CHECKS
@@ -288,6 +288,11 @@ Decided by the owner on 26 November 2026, after the morning report (built and te
 - `whatsapp_count/` must stay standard-library only and import nothing from
   the project. Two tests fail if it loads a network library.
 
+- Every case has four progress steps (`copy.STEPS`: received, assigned, in
+  progress, closed), recorded with time and who in the `steps` table
+  (`Store._step`). The board shows them on each card; the sender sees them
+  under their own report (`/api/reports/N/status`, steps only, no names).
+
 Not built: correcting the room on the phone before the report reaches the
-board, status updates back to the sender, closing by uploading a photo, a QR
-code for the phone page, a button for the journey stage.
+board, closing by uploading a photo, a QR code for the phone page, a button for
+the journey stage.

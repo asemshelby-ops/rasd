@@ -412,3 +412,31 @@ default; when the mock-card step becomes possible one highlighted suggestion
 button appears above the text box and opens the camera directly, and it hides
 again after the card is read.
 
+## Progress steps on every case (owner's request, 26 November 2026)
+
+Built as asked: four steps (received, assigned to its owner, in progress,
+closed), a small row on every board card, the same row under the sender's own
+report on the phone, each step change recorded with its time and who did it,
+labels in `app/copy.py`, existing colours only. Choices I made:
+
+100. **When each step is reached.** Received: when the first report arrives
+     (by the sender). Assigned: at once when nothing needs confirming (by
+     Rasd), or when the supervisor confirms (by the supervisor), or when the
+     sender's answer completes the report (by Rasd). In progress: the first
+     "استلمتُ الحالة". Closed: the close action.
+101. **Every open, assigned case can now be acknowledged from the board**, not
+     only critical ones, because the third step needs an action. Only critical
+     cases have an acknowledge deadline, as before.
+102. **A case closed without being acknowledged** ends on "closed"; the skipped
+     step is drawn as passed and nothing is recorded for it.
+103. **Done steps are outlined in dark, the current one is filled, the ones to
+     come are outlined in the muted colour.** The closed step is filled green,
+     since green means closed. Each step also says its state in words for a
+     screen reader.
+104. **The sender sees the steps and their state, nothing else**: no staff
+     name, no place, no text. Who did each step is in the record
+     (`/api/cases/N/steps`), not on the phone. The phone asks again every three
+     seconds until the case is closed.
+105. **The step record is its own table** (`steps`), beside the event log,
+     so the log's meaning did not change.
+
