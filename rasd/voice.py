@@ -67,16 +67,19 @@ class SavedTranscripts:
 
 
 class OpenAITranscriber:
-    """The live path. Not exercised in tests: it needs the paid key and real speech."""
+    """The live path: OpenAI's transcription service. Tested with the network replaced; never yet run for real."""
 
-    def __init__(self, key: str, timeout: float = 20.0):
+    URL = "https://api.openai.com/v1/audio/transcriptions"
+
+    def __init__(self, key: str, timeout: float = 20.0, client=None):
         self.key = key
         self.timeout = timeout
+        self.client = client or httpx2  # tests pass a client whose network is replaced
 
     def transcribe(self, audio: bytes, filename: str) -> str:
         try:
-            response = httpx2.post(
-                "https://api.openai.com/v1/audio/transcriptions",
+            response = self.client.post(
+                self.URL,
                 headers={"Authorization": f"Bearer {self.key}"},
                 data={"model": OPENAI_MODEL},
                 files={"file": (filename, audio)},
@@ -84,8 +87,15 @@ class OpenAITranscriber:
             )
         except httpx2.HTTPError:
             raise VoiceError("could not reach the speech-to-text service (network problem or timeout)") from None
-        if response.status_code != 200:
-            raise VoiceError(f"the speech-to-text service answered with error {response.status_code}")
+        status = response.status_code
+        if status == 401:
+            raise VoiceError(f"the speech-to-text key was rejected (401): check {OPENAI_KEY_VARIABLE}")
+        if status == 429:
+            raise VoiceError("the speech-to-text service refused (429): too many requests, or no credit left on the account")
+        if status in (400, 413, 415):
+            raise VoiceError(f"the service could not use this recording ({status}): use m4a, mp3, wav or webm, under 25 MB")
+        if status != 200:
+            raise VoiceError(f"the speech-to-text service answered with error {status}")
         return response.json().get("text", "").strip()
 
 

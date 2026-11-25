@@ -120,7 +120,7 @@ def main() -> None:
         engine.read = counted
 
     with tempfile.TemporaryDirectory() as folder:
-        app = create_app(engine=engine, db_path=Path(folder) / "measure.db")
+        app = create_app(engine=engine, db_path=Path(folder) / "measure.db", pin="off")
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
         thread = threading.Thread(target=server.run, daemon=True)
         thread.start()

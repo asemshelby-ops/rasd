@@ -38,6 +38,7 @@ from rasd.numbers import (
 )
 from rasd.privacy import OTHER_MARK, PASSPORT_MARK, VISA_MARK, PrivateNumbers, redact
 from rasd.routing import (
+    near_hotel,
     ACKNOWLEDGE_MINUTES,
     DEADLINE_MINUTES,
     FAULT_TYPES,
@@ -358,6 +359,10 @@ def build_report(
     # A hotel the model gives that is not in the message is not kept, and a person looks at the report.
     if reading.hotel.strip() and not contains_name(message, reading.hotel):
         reasons.append("hotel_not_confirmed")
+    # A hotel name that is nearly one of the team's hotels is never corrected silently:
+    # the sender is asked "did you mean ...?", and until then a person looks at the report.
+    if near_hotel(hotel):
+        reasons.append("hotel_near_match")
     # A risk counts even when its words are not found in the message, because the
     # higher priority is the safe side. But then a person must look at the report.
     if any(not contains_words_in_order(message, quoted[risk]) for risk in risks):

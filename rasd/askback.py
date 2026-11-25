@@ -12,10 +12,12 @@ from dataclasses import dataclass, replace
 
 from rasd.numbers import normalise, spoken_number
 from rasd.privacy import OTHER_MARK, PASSPORT_MARK, VISA_MARK, redact
-from rasd.routing import HOTELS, NUMBERED_PLACES, match_hotel, missing_requirements
+from rasd.routing import HOTELS, NUMBERED_PLACES, match_hotel, missing_requirements, near_hotel
 from rasd.schema import TYPES
 from rasd.text import to_western_digits
 from rasd.understand import Understanding, settle
+
+YES, NO = "نعم", "لا"
 
 # The types a sender can pick when asked what the problem is.
 TYPE_BUTTONS = {label: code for code, label in TYPES.items() if code not in ("unclear", "not_a_report")}
@@ -34,7 +36,7 @@ _NUMBER_LABELS = {"جواز", "الجواز", "جوازه", "رقم", "تاشي�
 
 @dataclass(frozen=True)
 class Question:
-    field: str  # what the answer fills: "type", "place", "hotel" or "name"
+    field: str  # what the answer fills: "type", "place", "hotel", "hotel_confirm" or "name"
     text: str  # the question, in Arabic
     options: tuple[str, ...] = ()  # tap-button answers; empty means the sender types or says the answer
 
@@ -45,6 +47,8 @@ def ask_back(report: Understanding) -> Question | None:
         return None
     if report.type == "unclear":
         return Question("type", "ما المشكلة؟", tuple(TYPE_BUTTONS))
+    if "hotel_near_match" in report.reasons and near_hotel(report.hotel):
+        return Question("hotel_confirm", f"هل تقصد فندق {near_hotel(report.hotel)}؟", (YES, NO))
     missing = missing_requirements(
         report.type, report.hotel, report.loc_kind, report.loc_number, report.pilgrim_name
     )
@@ -77,6 +81,12 @@ def answer(report: Understanding, question: Question, reply: str, stage: str | N
         hotel = match_hotel(reply)
         if hotel:
             changes["hotel"] = hotel
+    elif question.field == "hotel_confirm":
+        # Only a tap decides. "نعم" takes the hotel of the list; "لا" keeps the name as written.
+        if reply.strip() in (YES, NO):
+            changes["reasons"] = tuple(reason for reason in report.reasons if reason != "hotel_near_match")
+        if reply.strip() == YES:
+            changes["hotel"] = near_hotel(report.hotel)
     elif question.field == "name":
         name = _name_in(reply)
         if name:

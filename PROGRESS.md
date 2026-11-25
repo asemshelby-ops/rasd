@@ -160,3 +160,12 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
   - cost: 0.0292 dollars
 - `MORNING_REPORT.md` written (Arabic). `CLAUDE.md` brought up to date.
 - All six stages are done. Nothing is left to continue.
+
+## After the run: owner's decisions on the morning report (26 November 2026)
+
+- Late waiting reports move to the overdue column; "did you mean <hotel>?"
+  with one tap for a nearly-right hotel name; a PIN on the operator and
+  supervisor pages; speech to text made ready for the key
+  (`python -m demo.check_speech`). QUESTIONS.md 82 to 87.
+- Tests: 878 passed. No API calls, no benchmark run.
+

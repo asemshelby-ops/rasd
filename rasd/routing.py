@@ -14,6 +14,8 @@ what a problem means for the pilgrim at each point of the journey. It was not
 fitted to the test reports.
 """
 
+import difflib
+
 from rasd.numbers import normalise, unglued
 from rasd.text import arabic_letters
 from rasd.schema import RISKS, STAGES, URGENCIES
@@ -105,6 +107,28 @@ def match_hotel(text: str) -> str | None:
         return partly[0]
     written = [word for word in text.split() if _folded(word)]
     return " ".join(written)
+
+
+# How alike two names must be (0 to 1) before we ask "did you mean ...?". Team-editable.
+NEAR_HOTEL_LIKENESS = 0.8
+
+
+def near_hotel(name: str | None) -> str | None:
+    """The one hotel of the list that a name is nearly, but not exactly: "برج السكينا" is near "برج السكينة".
+
+    None when the name is already a hotel of the list, is near none, or is near two.
+    Nothing is ever corrected from this: it is only used to ASK the sender.
+    """
+    if not name or match_hotel(name) in HOTELS:
+        return None
+    written = " ".join(_folded(name))
+    if len(written) < 5:
+        return None
+    near = [
+        hotel for hotel in HOTELS
+        if difflib.SequenceMatcher(None, written, " ".join(_folded(hotel))).ratio() >= NEAR_HOTEL_LIKENESS
+    ]  # fmt: skip
+    return near[0] if len(near) == 1 else None
 
 
 # ---------------------------------------------------------------------------

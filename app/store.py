@@ -317,10 +317,10 @@ class Store:
         next_due = acknowledge_due if acknowledge_due and not acknowledged else close_due
         if incident.closed_at is not None:
             state = "closed"
+        elif now > next_due:
+            state = "late"  # also when it still waits for the supervisor (owner's decision): see "waiting" below
         elif row["waiting"]:
             state = "waiting"
-        elif now > next_due:
-            state = "late"
         else:
             state = "routed"
         found = json.loads(row["identified"]) if row["identified"] else None
@@ -335,6 +335,7 @@ class Store:
             "priority_label": copy.URGENCIES[incident.urgency],
             "owner": copy.OWNERS[OWNER_BY_TYPE[incident.type]],
             "state": state,
+            "waiting": bool(row["waiting"]) and state != "closed",  # the supervisor has not confirmed it yet
             "state_label": copy.STATES[state],
             "count": incident.message_count,
             "count_text": copy.count_text(incident.message_count),
@@ -355,7 +356,7 @@ class Store:
 
         The words have their passport and visa numbers hidden. This never goes to the big screen.
         """
-        waiting = [case for case in self.board(now) if case["state"] == "waiting"]
+        waiting = [case for case in self.board(now) if case["waiting"]]
         with self.lock:
             for case in waiting:
                 rows = self.db.execute("select safe_text, report from reports where case_id = ? order by id", (case["id"],)).fetchall()

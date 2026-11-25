@@ -13,6 +13,7 @@
       <p class="case-place">{{ case.place }}</p>
       <p class="case-owner">إلى: {{ case.owner }}</p>
       {% if case.count > 1 %}<p class="case-count">{{ case.count_text }}</p>{% endif %}
+      {% if case.waiting and case.state == "late" %}<p class="case-note"><span class="tag">{{ copy.STILL_WAITING }}</span></p>{% endif %}
       {% if case.from_saved %}<p class="case-note"><span class="tag">{{ copy.FROM_SAVED }}</span></p>{% endif %}
       {% if case.photo_attached %}<p class="case-note">{{ copy.PHOTO_ATTACHED }}</p>{% endif %}
       {% if case.identified_text %}<p class="case-identified">{{ case.identified_text }}</p>{% endif %}
@@ -30,7 +31,7 @@
           <p class="case-note"><a href="/cases/{{ case.id }}/replacement">{{ copy.OPEN_REQUEST }}</a></p>
         {% endif %}
         <div class="actions">
-          {% if case.state == "waiting" %}<button type="button" data-action="confirm" data-case="{{ case.id }}">{{ copy.CONFIRM }}</button>{% endif %}
+          {% if case.waiting %}<button type="button" data-action="confirm" data-case="{{ case.id }}">{{ copy.CONFIRM }}</button>{% endif %}
           {% if case.acknowledge_due and not case.acknowledged %}<button type="button" data-action="acknowledge" data-case="{{ case.id }}">{{ copy.ACKNOWLEDGE }}</button>{% endif %}
           <button type="button" class="close" data-action="close" data-case="{{ case.id }}">{{ copy.CLOSE }}</button>
         </div>

@@ -317,3 +317,35 @@ It found 3 critical and 13 important issues. What I did with them:
 81. **Final benchmark** (one run, after the fixes): 0 confident mistakes, all
     fields right on 57 of 58, saved in `measurements/stage6_final_benchmark.txt`.
 
+## After the morning report (owner's decisions, 26 November 2026)
+
+The owner decided three open points. They are no longer provisional:
+
+- A late report that waits for the supervisor moves to the overdue column.
+- A hotel name with a small transcription error is matched only against the
+  company's own hotel list, never corrected silently; the sender is asked with
+  one tap: "Did you mean <hotel>?".
+- A simple PIN on the operator page and the supervisor page.
+
+Choices I made while building them:
+
+82. **The overdue card still says it waits for the supervisor** and keeps its
+    confirm button; it stays on the supervisor page until confirmed.
+83. **"Nearly" means at least 0.8 alike** (`NEAR_HOTEL_LIKENESS` in
+    `rasd/routing.py`) and near exactly one hotel of the list. Until the sender
+    taps, the report waits for the supervisor and the board does not print the
+    name as written. "نعم" takes the hotel of the list; "لا" keeps the name as
+    written and asks nothing more; any other reply changes nothing.
+84. **This question comes before the other ask-back questions**, since a
+    report has one question only.
+85. **After "نعم" the report is not re-merged** into an older case of that
+    hotel; it stays its own case. Not built.
+86. **The PIN** is read from `RASD_PIN` in `.env`. When it is not set a random
+    4-digit PIN is made at every start and printed in the laptop's terminal.
+    Five wrong tries shut the door for one minute. It is entered once per
+    phone after each start. The board and the sending page need no PIN. The
+    value "off" turns it off, for the tests only.
+87. **Speech to text**: `python -m demo.check_speech FILE` tries the live
+    service on one recording. The request and its errors are tested with the
+    network replaced; the live service itself has still never been called.
+

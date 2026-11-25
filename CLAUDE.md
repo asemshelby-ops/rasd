@@ -14,11 +14,11 @@ these before changing anything:
 
 - `MORNING_REPORT.md` (Arabic): the report to the owner, with what is needed from them.
 - `PROGRESS.md`: what each stage did, test counts, measurements, API spending.
-- `QUESTIONS.md`: the 81 choices made without the owner, numbered. The owner
-  has not yet confirmed them. Treat them as provisional.
+- `QUESTIONS.md`: the 87 choices made without the owner, numbered. The owner
+  has not yet confirmed them, except the three listed below. Treat the rest as provisional.
 - `DEMO.md` (Arabic): demo-day guide. `WHATSAPP_COUNT.md` (Arabic): the counting tool.
 
-What exists (847 tests, `python -m pytest`, no key and no network needed):
+What exists (878 tests, `python -m pytest`, no key and no network needed):
 
 - `rasd/`: the rules. The model READS a message (`understand.py`); the team's
   tables DECIDE owner, priority and deadlines (`routing.py`); our code CHECKS
@@ -113,6 +113,17 @@ Set by the owner in the overnight instructions (25 November 2026):
 - Lost pilgrim: two reports from the same hotel within 15 minutes are one case.
 - No real pilgrim data and no real Nusuk card, ever. Simulated parts are
   labelled on screen.
+
+Decided by the owner on 26 November 2026, after the morning report (built and tested):
+
+- A late report that waits for the supervisor moves to the overdue column.
+- A hotel name with a small transcription error is matched only against the
+  company's own hotel list and never corrected silently: the sender is asked
+  with one tap, "Did you mean <hotel>?".
+- The operator page and the supervisor page ask for a PIN (`RASD_PIN` in
+  `.env`; a random one is printed at start when it is not set).
+- Speech to text is ready for the key: `python -m demo.check_speech FILE` tries
+  one recording. The live service has still never been called.
 
 ## How to work
 
@@ -262,8 +273,8 @@ Set by the owner in the overnight instructions (25 November 2026):
 - The scene's words have one source, `demo/scene.py`. After changing them run
   `python -m demo.make_scene_assets`, `python -m demo.record_scene` (three
   paid calls) and the tests.
-- `/operator` and `/supervisor` have no password: the hotspot password is the
-  only protection.
+- `/operator` and `/supervisor` ask for a PIN (`RASD_PIN`). In tests the PIN is
+  turned off by `tests/conftest.py`.
 - `whatsapp_count/` must stay standard-library only and import nothing from
   the project. Two tests fail if it loads a network library.
 

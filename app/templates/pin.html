@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ copy.PIN_TITLE }}{% endblock %}
+{% block body_class %}operator-page{% endblock %}
+{% block main %}
+<h1>{{ copy.PIN_TITLE }}</h1>
+<p>{{ copy.PIN_HELP }}</p>
+{% if message %}<p class="message" role="alert">{{ message }}</p>{% endif %}
+<form method="post" action="/pin" class="panel">
+  <input type="hidden" name="next" value="{{ next }}">
+  <label for="pin">{{ copy.PIN_LABEL }}</label>
+  <input id="pin" name="pin" type="password" inputmode="numeric" autocomplete="off" autofocus required>
+  <button type="submit" class="primary big">{{ copy.PIN_ENTER }}</button>
+</form>
+{% endblock %}

@@ -9,9 +9,12 @@ What the big screen may show is decided in app/store.py (Store.board): no full
 name, no passport or visa number, no words of a message, no photo.
 """
 
+import hashlib
+import hmac
 import json
 import logging
 import os
+import secrets
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -29,6 +32,7 @@ from demo import scene
 from rasd.askback import ask_back
 from rasd.elm import SimulatedElm
 from rasd.privacy import redact
+from rasd.text import to_western_digits
 from rasd.routing import CHECKLISTS, HOTELS
 from rasd.understand import KEY_VARIABLE
 from rasd.voice import OPENAI_KEY_VARIABLE, VoiceError
@@ -52,6 +56,25 @@ MAX_AUDIO_BYTES = 15_000_000
 # "replay" answers the demo scene from saved files with no network.
 MODES = ("live", "replay")
 
+# The operator page and the supervisor page ask for a PIN. It is read from RASD_PIN
+# (in the .env file). When that is not set, a random one is made at start and printed in
+# the terminal. "off" turns the PIN off; the tests use that, and nobody else should.
+PIN_VARIABLE = "RASD_PIN"
+PIN_OFF = "off"
+PIN_PROTECTED = ("/operator", "/api/operator", "/supervisor")
+PIN_TRIES = 5
+PIN_LOCK_SECONDS = 60
+
+
+def pin_for_this_run() -> str:
+    load_dotenv(PROJECT_DIR / ".env")
+    pin = to_western_digits(os.environ.get(PIN_VARIABLE, "")).strip()
+    if not pin:
+        pin = f"{secrets.randbelow(10000):04d}"
+        print(f"PIN for the operator and supervisor pages (set {PIN_VARIABLE} in .env to choose your own): {pin}")
+    return pin
+
+
 # SIMULATED rows of the Elm view: other companies' replacement requests. Each is
 # (company, label, hours left when the page is opened). All invented.
 SIMULATED_REPLACEMENTS = [
@@ -66,7 +89,7 @@ def problem(status: int, message: str) -> JSONResponse:
     return JSONResponse({"message": message}, status_code=status)
 
 
-def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay=None) -> FastAPI:
+def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay=None, pin: str | None = None) -> FastAPI:
     """Builds the site. engine reads messages (app/engine.py); now() gives the time. Tests pass their own."""
     app = FastAPI(title="Rasd")
     store = Store(db_path)
@@ -75,6 +98,45 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
     app.state.store = store
     app.state.last_voice = None  # how long the last voice note took, for the operator page
     app.state.operator_message = None  # what the operator's last button did, shown once
+
+    # --- the PIN of the operator and supervisor pages -----------------------------------------------
+    app.state.pin = pin if pin is not None else pin_for_this_run()
+    pass_token = hashlib.sha256(f"{secrets.token_hex(16)}:{app.state.pin}".encode()).hexdigest()  # new at every start
+    doors = {"wrong": 0, "shut_until": None}
+
+    @app.middleware("http")
+    async def ask_for_the_pin(request: Request, call_next):
+        path = request.url.path
+        locked = app.state.pin != PIN_OFF and any(path == p or path.startswith(p + "/") for p in PIN_PROTECTED)
+        if locked and not hmac.compare_digest(request.cookies.get("rasd_pass", ""), pass_token):
+            if path.startswith("/api/"):
+                return problem(401, copy.PIN_NEEDED)
+            return RedirectResponse(f"/pin?next={path}", status_code=303)
+        return await call_next(request)
+
+    def pin_page(request: Request, next: str, message: str | None = None, status: int = 200):
+        target = next if next in ("/operator", "/supervisor") else "/operator"
+        return templates.TemplateResponse(request, "pin.html", {"copy": copy, "next": target, "message": message}, status_code=status)
+
+    @app.get("/pin", response_class=HTMLResponse)
+    def pin_form(request: Request, next: str = "/operator"):
+        return pin_page(request, next)
+
+    @app.post("/pin", response_class=HTMLResponse)
+    def pin_entered(request: Request, pin: str = Form(""), next: str = Form("/operator")):
+        moment = now()
+        if doors["shut_until"] and moment < doors["shut_until"]:
+            return pin_page(request, next, copy.PIN_LOCKED, 429)
+        if not hmac.compare_digest(to_western_digits(pin).strip().encode(), app.state.pin.encode()):
+            doors["wrong"] += 1
+            if doors["wrong"] >= PIN_TRIES:
+                doors["wrong"], doors["shut_until"] = 0, moment + timedelta(seconds=PIN_LOCK_SECONDS)
+                return pin_page(request, next, copy.PIN_LOCKED, 429)
+            return pin_page(request, next, copy.PIN_WRONG, 401)
+        doors["wrong"], doors["shut_until"] = 0, None
+        response = RedirectResponse(next if next in ("/operator", "/supervisor") else "/operator", status_code=303)
+        response.set_cookie("rasd_pass", pass_token, httponly=True, samesite="lax")
+        return response
 
     def live_engine():
         nonlocal engine

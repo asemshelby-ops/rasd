@@ -1,0 +1,298 @@
+"""The owner's decisions on the morning report (26 November 2026), and the speech-to-text path.
+
+No AI model and no network here. Everything is invented.
+"""
+
+from datetime import datetime, timedelta
+
+import httpx2
+import pytest
+from fastapi.testclient import TestClient
+
+from app import copy
+from app.main import create_app
+from rasd.askback import answer, ask_back
+from rasd.elm import SimulatedElm
+from rasd.routing import HOTELS, near_hotel
+from rasd.understand import Reading, build_report
+from rasd.voice import OPENAI_MODEL, OpenAITranscriber, VoiceError
+
+HOTEL = "برج السكينة"
+
+
+def reading(**fields) -> Reading:
+    base = dict(
+        type="water", hotel="", location_kind="room", number_words="907", location_number="907", pilgrim_name="",
+        risks=[], partial_words="", confidence="high",
+    )  # fmt: skip
+    base.update(fields)
+    return Reading(**base)
+
+
+class Engine:
+    def __init__(self):
+        self.elm, self.readings = SimulatedElm(), {}
+
+    def read(self, text, photo_attached=False):
+        return build_report(text, self.readings.get(text, reading()), photo_attached=photo_attached)
+
+
+class Clock:
+    def __init__(self):
+        self.now = datetime(2026, 12, 23, 10, 0, 0)
+
+    def __call__(self):
+        return self.now
+
+
+def make_site(tmp_path, **options):
+    engine, clock = Engine(), Clock()
+    client = TestClient(create_app(engine=engine, db_path=tmp_path / "rasd.db", now=clock, **options))
+    client.engine, client.clock = engine, clock
+    return client
+
+
+@pytest.fixture
+def site(tmp_path):
+    return make_site(tmp_path)
+
+
+def send(site, text, hotel=HOTEL):
+    return site.post("/api/reports", data={"text": text, "hotel": hotel}).json()
+
+
+def cases(site):
+    return site.get("/api/board").json()["cases"]
+
+
+# --- 1. a late report that waits for the supervisor moves to the overdue column -----------------------
+
+
+def unclear(site):
+    site.engine.readings["في مشكلة"] = reading(type="unclear", location_kind="none", number_words="", location_number="", confidence="low")
+    return send(site, "في مشكلة")
+
+
+def test_a_waiting_report_past_its_time_is_in_the_overdue_column_and_still_says_it_waits(site):
+    unclear(site)
+    assert cases(site)[0]["state"] == "waiting"
+    site.clock.now += timedelta(minutes=16)  # urgent: 15 minutes (trial value)
+    (case,) = cases(site)
+    assert case["state"] == "late" and case["waiting"] is True
+    page = site.get("/board").text
+    assert copy.STILL_WAITING in page and copy.CONFIRM in page  # the supervisor can still confirm it from there
+
+
+def test_an_overdue_waiting_report_is_still_on_the_supervisor_page(site):
+    unclear(site)
+    site.clock.now += timedelta(minutes=16)
+    assert "في مشكلة" in site.get("/supervisor").text
+
+
+def test_confirming_an_overdue_report_keeps_it_overdue_but_no_longer_waiting(site):
+    unclear(site)
+    site.clock.now += timedelta(minutes=16)
+    site.post("/api/cases/1/confirm", data={"who": "سالم"})
+    (case,) = cases(site)
+    assert case["state"] == "late" and case["waiting"] is False
+
+
+# --- 2. a hotel name that is nearly right: never corrected silently, the sender is asked with one tap ----
+
+
+@pytest.mark.parametrize("written, meant", [("برج السكينا", "برج السكينة"), ("نزل الياسمن", "نزل الياسمين"), ("دار المنار", "دار المنارة")])
+def test_a_small_slip_is_near_one_hotel_of_the_list(written, meant):
+    assert near_hotel(written) == meant
+
+
+def test_a_name_far_from_every_hotel_or_already_in_the_list_is_near_nothing():
+    assert near_hotel("قصر الغيم") is None
+    assert near_hotel("برج") is None
+    assert near_hotel(HOTELS[0]) is None
+
+
+def slip():
+    text = "المكيف خربان في برج السكينا غرفة 907"
+    return build_report(text, reading(type="ac", hotel="برج السكينا"))
+
+
+def test_a_nearly_right_hotel_is_not_corrected_and_the_report_waits():
+    report = slip()
+    assert report.hotel == "برج السكينا"  # as written: nothing is corrected silently
+    assert report.needs_confirmation and "hotel_near_match" in report.reasons
+
+
+def test_the_sender_is_asked_did_you_mean_with_two_taps():
+    question = ask_back(slip())
+    assert question.field == "hotel_confirm"
+    assert question.text == "هل تقصد فندق برج السكينة؟"
+    assert question.options == ("نعم", "لا")
+
+
+def test_yes_sets_the_hotel_of_the_list_and_the_report_no_longer_waits():
+    report = slip()
+    completed = answer(report, ask_back(report), "نعم")
+    assert completed.hotel == "برج السكينة" and not completed.needs_confirmation
+
+
+def test_no_keeps_the_hotel_as_written_and_the_report_goes_on_without_a_guess():
+    report = slip()
+    completed = answer(report, ask_back(report), "لا")
+    assert completed.hotel == "برج السكينا" and "hotel_near_match" not in completed.reasons
+    assert ask_back(completed) is None
+
+
+def test_any_other_reply_changes_nothing_and_the_supervisor_keeps_it():
+    report = slip()
+    completed = answer(report, ask_back(report), "مدري")
+    assert completed.hotel == "برج السكينا" and completed.needs_confirmation
+
+
+def test_through_the_pages_the_tap_completes_the_same_report(site):
+    text = "المكيف خربان في برج السكينا غرفة 907"
+    site.engine.readings[text] = reading(type="ac", hotel="برج السكينا")
+    reply = send(site, text, hotel="")
+    assert reply["question"] == {"text": "هل تقصد فندق برج السكينة؟", "options": ["نعم", "لا"]}
+    assert cases(site)[0]["state"] == "waiting" and "السكينا" not in site.get("/board").text
+    site.post(f"/api/reports/{reply['report_id']}/answer", data={"reply": "نعم"})
+    (case,) = cases(site)
+    assert case["state"] == "routed" and "برج السكينة" in case["place"]
+
+
+# --- 3. a PIN on the operator page and the supervisor page ------------------------------------------------
+
+
+PROTECTED_PAGES = ["/operator", "/supervisor"]
+
+
+@pytest.fixture
+def locked(tmp_path, monkeypatch):
+    monkeypatch.setenv("RASD_PIN", "4821")
+    return make_site(tmp_path)
+
+
+@pytest.mark.parametrize("path", PROTECTED_PAGES)
+def test_without_the_pin_the_page_asks_for_it(locked, path):
+    page = locked.get(path, follow_redirects=True)
+    assert copy.PIN_TITLE in page.text and copy.OPERATOR_TITLE not in page.text.replace(copy.PIN_TITLE, "")
+    assert '<html lang="ar" dir="rtl"' in page.text
+
+
+def test_without_the_pin_the_operator_actions_are_refused(locked):
+    for path, data in [("/api/operator/mode", {"mode": "replay"}), ("/api/operator/reset", {"confirm": "yes"}), ("/operator/mode", {"mode": "replay"}), ("/api/operator/scene/counter", {})]:
+        reply = locked.post(path, data=data, follow_redirects=False)
+        assert reply.status_code in (401, 303), path
+    assert locked.get("/api/operator/status").status_code == 401
+    locked.post("/pin", data={"pin": "4821"})
+    assert locked.get("/api/operator/status").json()["mode"] == "live"
+
+
+def test_the_right_pin_opens_both_pages_and_a_wrong_one_does_not(locked):
+    wrong = locked.post("/pin", data={"pin": "0000", "next": "/operator"})
+    assert copy.PIN_WRONG in wrong.text
+    assert copy.PIN_TITLE in locked.get("/operator", follow_redirects=True).text
+    right = locked.post("/pin", data={"pin": "4821", "next": "/operator"}, follow_redirects=True)
+    assert copy.MODE_LIVE in right.text
+    assert locked.get("/supervisor").status_code == 200
+
+
+def test_the_pin_accepts_arabic_digits(locked):
+    locked.post("/pin", data={"pin": "٤٨٢١"})
+    assert locked.get("/operator").status_code == 200
+
+
+def test_the_board_and_the_sending_page_need_no_pin(locked):
+    assert locked.get("/board").status_code == 200 and locked.get("/report").status_code == 200
+    assert locked.post("/api/reports", data={"text": "ما في موية في غرفة 907", "hotel": HOTEL}).status_code == 200
+
+
+def test_after_five_wrong_pins_the_door_stays_shut_for_a_while(locked):
+    for _ in range(5):
+        locked.post("/pin", data={"pin": "0000"})
+    shut = locked.post("/pin", data={"pin": "4821"})
+    assert copy.PIN_LOCKED in shut.text
+    locked.clock.now += timedelta(seconds=61)
+    locked.post("/pin", data={"pin": "4821"})
+    assert locked.get("/operator").status_code == 200
+
+
+def test_the_pin_never_goes_only_after_the_page_is_open_elsewhere(locked, tmp_path):
+    locked.post("/pin", data={"pin": "4821"})
+    stranger = TestClient(locked.app)
+    assert copy.PIN_TITLE in stranger.get("/operator", follow_redirects=True).text
+
+
+def test_with_no_pin_set_a_random_one_is_made_and_the_pages_stay_locked(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("RASD_PIN", raising=False)
+    monkeypatch.setattr("app.main.load_dotenv", lambda *a, **k: None)
+    site = make_site(tmp_path)
+    assert copy.PIN_TITLE in site.get("/operator", follow_redirects=True).text
+    pin = site.app.state.pin
+    assert len(pin) == 4 and pin.isdigit()
+    assert pin in capsys.readouterr().out  # printed once in the terminal of the laptop, for the team
+
+
+# --- speech to text: ready for the key ------------------------------------------------------------------------
+
+
+def transcriber(handler):
+    return OpenAITranscriber("test-key", client=httpx2.Client(transport=httpx2.MockTransport(handler)))
+
+
+def test_the_request_to_the_speech_service_is_what_the_service_expects():
+    seen = {}
+
+    def handler(request):
+        seen["url"], seen["auth"], seen["body"] = str(request.url), request.headers["authorization"], request.read()
+        return httpx2.Response(200, json={"text": " المكيف خربان في غرفة 907 "})
+
+    assert transcriber(handler).transcribe(b"sound bytes", "note.m4a") == "المكيف خربان في غرفة 907"
+    assert seen["url"] == "https://api.openai.com/v1/audio/transcriptions"
+    assert seen["auth"] == "Bearer test-key"
+    assert OPENAI_MODEL.encode() in seen["body"] and b'filename="note.m4a"' in seen["body"] and b"sound bytes" in seen["body"]
+
+
+@pytest.mark.parametrize("status, hint", [(401, "key"), (429, "credit"), (400, "recording"), (500, "500")])
+def test_an_error_of_the_speech_service_says_what_to_check(status, hint):
+    with pytest.raises(VoiceError, match=hint):
+        transcriber(lambda request: httpx2.Response(status, json={"error": {"message": "no"}})).transcribe(b"a", "a.m4a")
+
+
+def test_a_dropped_network_is_a_voice_error_not_a_crash():
+    def handler(request):
+        raise httpx2.ConnectError("no route")
+
+    with pytest.raises(VoiceError, match="reach"):
+        transcriber(handler).transcribe(b"a", "a.m4a")
+
+
+def test_an_error_never_carries_the_key():
+    with pytest.raises(VoiceError) as error:
+        transcriber(lambda request: httpx2.Response(401, json={})).transcribe(b"a", "a.m4a")
+    assert "test-key" not in str(error.value)
+
+
+def test_the_check_tool_prints_the_words_the_time_and_what_rasd_makes_of_them(tmp_path, capsys):
+    from demo.check_speech import check
+
+    recording = tmp_path / "note.m4a"
+    recording.write_bytes(b"sound")
+
+    class Hears:
+        def transcribe(self, audio, filename):
+            return "المكيف خربان في غرفة 907"
+
+    assert check(recording, Hears(), read=None) == 0
+    printed = capsys.readouterr().out
+    assert "Words heard" in printed and "Seconds" in printed
+
+
+def test_the_check_tool_says_what_to_do_when_the_key_is_missing(tmp_path, capsys, monkeypatch):
+    from demo import check_speech
+
+    monkeypatch.delenv("RASD_OPENAI_KEY", raising=False)
+    monkeypatch.setattr(check_speech, "load_dotenv", lambda *a, **k: None)
+    recording = tmp_path / "note.m4a"
+    recording.write_bytes(b"sound")
+    assert check_speech.main([str(recording)]) != 0
+    assert "RASD_OPENAI_KEY" in capsys.readouterr().err
