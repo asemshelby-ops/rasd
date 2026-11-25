@@ -34,8 +34,8 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
 | 2 | Real field style (items 1 to 11); measure | DONE |
 | 3 | The demo scene: reporting page, board, lost-card flow, Elm view, before-and-after page | DONE |
 | 4 | Demo safety: voice-to-board time, replay switch, Windows steps, scenario card, risk tests | DONE |
-| 5 | Local WhatsApp counting tool | NEXT |
-| 6 | Code review, final benchmark, MORNING_REPORT.md | not started |
+| 5 | Local WhatsApp counting tool | DONE |
+| 6 | Code review, final benchmark, MORNING_REPORT.md | NEXT |
 
 ## Stage notes
 
@@ -125,3 +125,18 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
   noise, double tap, upload limits, no-script form).
 - Tests: 705 passed.
 - Next: stage 5.
+
+### Stage 5: DONE
+
+- `whatsapp_count/`: reads a WhatsApp text export (Android and iPhone lines,
+  both digit styles, 12 and 24 hour time, day-first, month-first, year-first
+  and Hijri dates, a .zip from an iPhone), flags report-like messages by word
+  rules, checks hotel and room, pairs closing replies, prints aggregates in
+  Arabic, and has a hand-check mode with an agreement rate.
+- Strictly local: two tests fail if a network library or the AI library is
+  imported (one runs the tool and looks at what was loaded, one reads every
+  import in its source). It refuses a file inside the repository.
+- Guide in Arabic: `WHATSAPP_COUNT.md` (WhatsApp export steps and Windows).
+- No API calls in this stage.
+- Tests: 783 passed.
+- Next: stage 6.

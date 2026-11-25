@@ -16,3 +16,11 @@ uploads/
 
 # The laptop's own https certificate for the hotspot demo (made by python -m demo.run)
 demo/cert/
+
+# WhatsApp exports, and anything made from them, never go into the repository.
+# (The counting tool also refuses to read a file that is inside it.)
+WhatsApp Chat*
+_chat.txt
+*_chat.txt
+*.rasd_counts.txt
+*.rasd_hand_check.csv

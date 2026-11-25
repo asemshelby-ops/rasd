@@ -208,3 +208,36 @@ what was chosen, why, and how to change it.
     message is kept and goes to the supervisor. Found by writing the
     bad-network test first.
 
+## Stage 5
+
+57. **The counting tool is its own folder** (`whatsapp_count/`), standard
+    library only. It imports nothing from the rest of the project, because
+    `rasd/` loads the AI library.
+58. **"Inside the repository" means inside this project's folder.** The hotels
+    list and the marked hand-check file are refused there too. What the tool
+    writes goes next to the export. `.gitignore` also ignores exports and the
+    files made from them, as a second guard.
+59. **What "looks like a report" means**: a strong word alone ("خربان", "ضاع",
+    "مريض"), or a topic word ("الشنط", "الوجبات") together with a cue that
+    something is missing or needed ("ما", "وين", "يحتاج"). The lists are at the
+    top of `whatsapp_count/rules.py`. It is a rough net; the hand check
+    measures it.
+60. **A closing reply is given to the latest open report before it, within 24
+    hours** (`--window-hours`). An export does not say which message a reply
+    answers. Known limit: "لقيناها" can land on the wrong report.
+61. **"Room named" means a room with its number.** A floor is not a room.
+62. **"Hotel named"**: by a word such as «فندق» or «برج», or by the team's own
+    list of names (`--hotels`).
+63. **Dates**: when the file cannot tell day-first from month-first, day first
+    is assumed and the report says so. Hijri dates are converted by the
+    tabular rule, so a span across a month's end can be a day off.
+64. **The hand-check file holds message text**, because the owner must read a
+    message to judge it. It has no sender names, long numbers are masked, and
+    the tool's own answer is not shown so that it cannot sway the marks. It is
+    the only output that is not an aggregate, and it never leaves the folder of
+    the export.
+65. **Photos are counted and never read.** A caption after a media line is read
+    as text.
+66. **The tool was tested only on fake exports I wrote** (Android and iPhone
+    styles, both digit styles). No real export was available, by design.
+
