@@ -6,7 +6,7 @@ room numbers of the benchmark reports, so the benchmark stays an honest check.
 
 import pytest
 
-from rasd.numbers import contains_words, spoken_number
+from rasd.numbers import TEEN_ENDINGS, contains_number, contains_words, spoken_number, teen_spellings
 
 
 @pytest.mark.parametrize(
@@ -173,3 +173,72 @@ def test_contains_words_is_false_for_words_that_were_never_said():
 
 def test_contains_words_is_false_for_an_empty_quote():
     assert not contains_words("غرفة تسعمية وسبعة", "")
+
+
+# --- a number written in digits in the message ------------------------------
+
+
+def test_a_number_written_in_western_digits_is_found():
+    assert contains_number("ما في موية في غرفة 907 من الصبح", "907") is True
+
+
+def test_a_number_written_in_arabic_digits_is_found():
+    assert contains_number("ما في موية في غرفة ٩٠٧ من الصبح", "907") is True
+
+
+def test_a_number_written_in_urdu_digits_is_found():
+    assert contains_number("کمرہ نمبر ۹۰۷ میں پانی نہیں ہے", "907") is True
+
+
+def test_a_number_that_is_only_part_of_a_longer_number_is_not_found():
+    assert contains_number("ما في موية في غرفة 1907", "907") is False
+    assert contains_number("ما في موية في غرفة 9075", "907") is False
+
+
+def test_a_number_with_extra_zeros_in_front_is_a_different_number():
+    assert contains_number("غرفة 0907", "907") is False
+
+
+def test_the_right_number_is_found_among_several():
+    assert contains_number("3 شنط ناقصة من غرفة 907 والدور 9", "907") is True
+    assert contains_number("3 شنط ناقصة من غرفة 907 والدور 9", "355") is False
+
+
+def test_digits_glued_to_a_word_are_still_found():
+    assert contains_number("ما في موية بغرفة907", "907") is True
+
+
+def test_a_message_with_no_digits_contains_no_number():
+    assert contains_number("ما في موية في غرفة تسعمية وسبعة", "907") is False
+
+
+def test_an_empty_number_is_never_found():
+    assert contains_number("غرفة 907", "") is False
+
+
+# --- the dialect words for 11 to 19, as a list the prompt can show ----------
+
+
+def test_teen_spellings_cover_every_number_from_11_to_19():
+    spellings = teen_spellings()
+    assert sorted(spellings) == list(range(11, 20))
+    assert all(spellings[number] for number in spellings)
+
+
+def test_teen_spellings_are_whole_words_with_the_commonest_ending():
+    assert "خمسطعش" in teen_spellings()[15]
+    assert "طنعش" in teen_spellings()[12]
+    assert all(word.endswith(TEEN_ENDINGS[0]) for words in teen_spellings().values() for word in words)
+
+
+def test_no_word_is_listed_under_two_numbers():
+    words = [word for spellings in teen_spellings().values() for word in spellings]
+    assert len(words) == len(set(words))
+
+
+def test_the_parser_reads_every_listed_spelling_with_every_ending():
+    for number, spellings in teen_spellings().items():
+        for word in spellings:
+            beginning = word.removesuffix(TEEN_ENDINGS[0])
+            for ending in TEEN_ENDINGS:
+                assert spoken_number(beginning + ending) == str(number), beginning + ending

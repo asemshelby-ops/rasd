@@ -1,11 +1,15 @@
 """Duplicate merging: several messages about the same problem become one incident.
 
-    incidents = group_reports([(report_id, sent_at, report), ...])
+    incident = add_report(incidents, report_id, sent_at, report)     one new report (the live system)
+    incidents = group_reports([(report_id, sent_at, report), ...])   a whole list at once (the benchmark)
 
 The rule (no AI in here):
   - same type + same place + sent within MERGE_WINDOW_MINUTES of the incident's
     latest message  ->  the message joins that incident
   - anything else starts a new incident
+
+A closed incident takes no more reports. A new report about the same problem in
+the same place opens a new incident, even inside the window: the problem came back.
 
 A report never merges when we are not sure what it is or where it is:
   - its type is unclear
@@ -13,9 +17,9 @@ A report never merges when we are not sure what it is or where it is:
     common area: we do not know which one)
   - it is waiting for the supervisor to confirm it (for example its room number
     was not confirmed, or the model was not confident)
-Such a report is always an incident of its own. A wrong merge would hide a
-pilgrim's problem inside another incident; a missed merge only shows one card
-too many on the board.
+Such a report is always an incident of its own, and nothing joins it. A wrong
+merge would hide a pilgrim's problem inside another incident; a missed merge
+only shows one card too many on the board.
 """
 
 from dataclasses import dataclass
@@ -25,8 +29,8 @@ from rasd.schema import URGENCIES
 from rasd.understand import Understanding
 
 # How long after the latest message of an incident a new message about the same
-# problem still counts as the same incident. This is a first judgement, not a
-# measured value: the team may change it.
+# problem still counts as the same incident. This is the team's judgement, not a
+# measured value: change it here.
 MERGE_WINDOW_MINUTES = 60
 
 _MOST_URGENT_FIRST = list(URGENCIES)
@@ -41,6 +45,8 @@ class Incident:
     report_ids: list[int]  # in the order the messages were sent
     first_at: datetime
     last_at: datetime
+    stays_alone: bool = False  # True: its report could not be merged, so nothing may join it either
+    closed_at: datetime | None = None  # set when the incident is closed; then it takes no more reports
 
     @property
     def message_count(self) -> int:
@@ -52,29 +58,53 @@ def can_merge(report: Understanding) -> bool:
     return report.type != "unclear" and report.loc_number is not None and not report.needs_confirmation
 
 
+def _may_take(incident: Incident, report: Understanding, sent_at: datetime, window: timedelta) -> bool:
+    """True when this open incident is about the same problem in the same place, and recent enough."""
+    return (
+        not incident.stays_alone
+        and incident.closed_at is None
+        and (incident.type, incident.loc_kind, incident.loc_number) == (report.type, report.loc_kind, report.loc_number)
+        and sent_at - incident.last_at <= window
+    )
+
+
+def add_report(
+    incidents: list[Incident],
+    report_id: int,
+    sent_at: datetime,
+    report: Understanding,
+    window_minutes: int = MERGE_WINDOW_MINUTES,
+) -> Incident:
+    """Puts one report into the list of incidents and returns the incident it landed in.
+
+    The report joins an incident that may take it, or starts a new incident,
+    which is added to the end of the list.
+    """
+    window = timedelta(minutes=window_minutes)
+    if can_merge(report):
+        for incident in reversed(incidents):  # the latest incident first
+            if _may_take(incident, report, sent_at, window):
+                incident.report_ids.append(report_id)
+                incident.last_at = sent_at
+                incident.urgency = min(incident.urgency, report.urgency, key=_MOST_URGENT_FIRST.index)
+                return incident
+    incident = Incident(
+        type=report.type,
+        loc_kind=report.loc_kind,
+        loc_number=report.loc_number,
+        urgency=report.urgency,
+        report_ids=[report_id],
+        first_at=sent_at,
+        last_at=sent_at,
+        stays_alone=not can_merge(report),
+    )
+    incidents.append(incident)
+    return incident
+
+
 def group_reports(arrivals, window_minutes: int = MERGE_WINDOW_MINUTES) -> list[Incident]:
     """Groups reports into incidents. arrivals is a list of (report id, time sent, report)."""
-    window = timedelta(minutes=window_minutes)
     incidents = []
-    growing = {}  # (type, place kind, place number) -> the latest incident a new message may join
     for report_id, sent_at, report in sorted(arrivals, key=lambda arrival: arrival[1]):
-        key = (report.type, report.loc_kind, report.loc_number)
-        incident = growing.get(key) if can_merge(report) else None
-        if incident is not None and sent_at - incident.last_at <= window:
-            incident.report_ids.append(report_id)
-            incident.last_at = sent_at
-            incident.urgency = min(incident.urgency, report.urgency, key=_MOST_URGENT_FIRST.index)
-            continue
-        incident = Incident(
-            type=report.type,
-            loc_kind=report.loc_kind,
-            loc_number=report.loc_number,
-            urgency=report.urgency,
-            report_ids=[report_id],
-            first_at=sent_at,
-            last_at=sent_at,
-        )
-        incidents.append(incident)
-        if can_merge(report):
-            growing[key] = incident
+        add_report(incidents, report_id, sent_at, report, window_minutes)
     return incidents

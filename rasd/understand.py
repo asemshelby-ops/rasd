@@ -21,7 +21,7 @@ import anthropic
 import pydantic
 from dotenv import load_dotenv
 
-from rasd.numbers import contains_words, spoken_number
+from rasd.numbers import TEEN_ENDINGS, contains_number, contains_words, spoken_number, teen_spellings
 from rasd.routing import DEADLINE_MINUTES, OWNER_BY_TYPE
 from rasd.schema import CONFIDENCES, LOCATION_KINDS, TYPES, URGENCIES
 from rasd.text import to_western_digits
@@ -53,6 +53,10 @@ people are affected at once (a whole floor, or an elevator)
 (air conditioning, water, electricity, luggage, Nusuk card) and none of the urgent \
 conditions apply
 - low: everything else: cleaning, partial or minor faults, routine requests"""
+
+# The dialect words for 11 to 19, one line per number: "- 12: اثنعش، ثنعش، طنعش، ...".
+# The list comes from numbers.py, so our parser and the model know the same words.
+TEEN_TABLE = "\n".join(f"- {number}: {'، '.join(words)}" for number, words in teen_spellings().items())
 
 # Rule for this prompt: never paste benchmark reports or their room numbers in
 # here as examples. tests/test_understand.py checks it.
@@ -96,7 +100,12 @@ Staff say room numbers in several ways:
 - as one number: "خمسمية وستة وثلاثين" is 536. Arabic says the units before the tens.
 - digit by digit: "سبعة تسعة صفر" is 790.
 - in pieces: "أحدعش ثلاثة وأربعين" is 11 then 43, so 1143. "تسعة أربعطعش" is 9 then 14, so 914.
-The numbers 11 to 19 have many dialect spellings.
+Each number from 11 to 19 is said as one word, and that word changes with the \
+dialect. Find the word in this list and use the number on its line. Do not work \
+the number out from how the word sounds:
+{TEEN_TABLE}
+These words may end in {"، ".join(TEEN_ENDINGS[1:])} instead of {TEEN_ENDINGS[0]}: \
+"خمسطعش" and "خمستاشر" are both 15.
 If the speaker corrects the number, use the number they end with.
 Other numbers in the message, such as counts, times and durations, are not the location.
 
@@ -145,10 +154,15 @@ class Understanding:
 
 
 def _number_is_confirmed(message: str, quote: str, number: str) -> bool:
-    """Our own second reading of the room number. All three must hold:
-    the number is digits, the quoted words are really in the message, and our
-    parser reads the same number from those words."""
-    return number.isdigit() and contains_words(message, quote) and spoken_number(quote) == number
+    """Our own second reading of the room number. It is confirmed when either:
+
+    - the message has that very number written in digits, or
+    - the words the model quoted are really in the message, and our parser reads
+      the same number from those words.
+    """
+    if contains_number(message, number):
+        return True
+    return contains_words(message, quote) and spoken_number(quote) == number
 
 
 def build_report(message: str, reading: Reading, input_tokens: int = 0, output_tokens: int = 0) -> Understanding:

@@ -50,6 +50,14 @@ def contains_words(message: str, quote: str) -> bool:
     return f" {quote} " in message or f" و{quote} " in message
 
 
+def contains_number(message: str, number: str) -> bool:
+    """True if the message has exactly this number written in digits.
+
+    Arabic and Urdu digits count. "907" is not found inside "1907".
+    """
+    return number in re.findall(r"[0-9]+", to_western_digits(message))
+
+
 # ---------------------------------------------------------------------------
 # 2. The number words.
 # ---------------------------------------------------------------------------
@@ -80,7 +88,19 @@ _TEEN_BEGINNINGS = {
     18: "ثمانط ثمانت ثمنط ثمنت ثمط تمانط تمانت تمنط تمنت تمط",
     19: "تسعط تسعت تسط",
 }
-_TEEN_ENDINGS = "عش عشر اشر اعش اعشر"
+TEEN_ENDINGS = "عش عشر اشر اعش اعشر".split()  # the commonest ending comes first
+
+
+def teen_spellings() -> dict[int, list[str]]:
+    """The words for 11 to 19 with the commonest ending: 15 -> ["خمسطعش", "خمستعش", ...].
+
+    The prompt in understand.py shows this list to the model, so a spelling added
+    to _TEEN_BEGINNINGS is learned by our parser and by the model together.
+    """
+    return {
+        value: [beginning + TEEN_ENDINGS[0] for beginning in beginnings.split()]
+        for value, beginnings in _TEEN_BEGINNINGS.items()
+    }
 
 _TENS = {
     20: "عشرين عشرون",
@@ -149,7 +169,7 @@ def _build_word_table() -> dict[str, tuple[str, int]]:
         add("unit", value, words.split())
     add("teen", 10, ["عشره", "عشر"])
     for value, beginnings in _TEEN_BEGINNINGS.items():
-        add("teen", value, [b + e for b in beginnings.split() for e in _TEEN_ENDINGS.split()])
+        add("teen", value, [b + e for b in beginnings.split() for e in TEEN_ENDINGS])
     for value, words in _TENS.items():
         add("tens", value, words.split())
     for value, words in _HUNDREDS.items():

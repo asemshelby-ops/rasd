@@ -11,7 +11,7 @@ import httpx2
 import pytest
 
 from rasd.data import load_expected, load_reports
-from rasd.numbers import normalise
+from rasd.numbers import TEEN_ENDINGS, normalise, teen_spellings
 from rasd.routing import DEADLINE_MINUTES
 from rasd.schema import FLAG_REASONS, LOCATION_KINDS, TYPES, URGENCIES
 from rasd.understand import EFFORT, SYSTEM_PROMPT, Reading, build_report, make_client, understand
@@ -113,6 +113,30 @@ def test_a_quote_that_is_not_in_the_message_is_flagged():
 def test_a_quote_we_cannot_read_is_flagged():
     message = "غرفة نمبر نو سو سات میں پانی نہیں ہے"
     report = build_report(message, reading(number_words="نو سو سات"))
+    assert report.reasons == ("number_not_confirmed",)
+
+
+def test_a_number_written_in_digits_in_the_message_is_confirmed_even_when_the_quote_is_not_a_copy():
+    # The model spelled the digits out as words instead of copying them from the message.
+    report = build_report("غرفة ٩٠٧ ما فيها موية من الصبح", reading(number_words="تسعة صفر سبعة"))
+    assert report.loc_number == "907"
+    assert report.needs_confirmation is False
+    assert report.reasons == ()
+
+
+def test_a_number_written_in_digits_in_the_message_is_confirmed_with_an_empty_quote():
+    report = build_report("غرفة 907 ما فيها موية من الصبح", reading(number_words=""))
+    assert report.reasons == ()
+
+
+def test_digits_that_are_only_part_of_a_longer_number_do_not_confirm_it():
+    report = build_report("غرفة 1907 ما فيها موية من الصبح", reading(number_words=""))
+    assert report.loc_number == "907"
+    assert report.reasons == ("number_not_confirmed",)
+
+
+def test_other_digits_in_the_message_do_not_confirm_a_different_number():
+    report = build_report("3 شنط ناقصة من غرفة 355", reading(type="luggage", number_words="", location_number="907"))
     assert report.reasons == ("number_not_confirmed",)
 
 
@@ -295,6 +319,29 @@ def test_the_model_can_only_answer_with_codes_from_the_schema():
 def test_the_prompt_explains_every_code():
     for code in [*TYPES, *LOCATION_KINDS, *URGENCIES]:
         assert code in SYSTEM_PROMPT, f"the prompt does not mention '{code}'"
+
+
+def prompt_line_for(number: int) -> str:
+    """The line of the prompt's dialect table for one number, for example the line of 12."""
+    lines = [line for line in SYSTEM_PROMPT.splitlines() if line.startswith(f"- {number}:")]
+    assert len(lines) == 1, f"the prompt should have exactly one line that starts with '- {number}:'"
+    return lines[0]
+
+
+def test_the_prompt_lists_every_dialect_word_our_parser_knows_for_11_to_19():
+    for number, spellings in teen_spellings().items():
+        listed = prompt_line_for(number).split(":", 1)[1].replace("،", " ").split()
+        assert listed == spellings
+
+
+def test_the_prompt_lists_the_palestinian_word_for_twelve():
+    # The first real benchmark run showed the small model reading this word as another number.
+    assert "طنعش" in prompt_line_for(12)
+
+
+def test_the_prompt_says_the_ending_of_these_words_can_change():
+    for ending in TEEN_ENDINGS:
+        assert ending in SYSTEM_PROMPT
 
 
 def test_the_prompt_does_not_contain_benchmark_room_numbers():

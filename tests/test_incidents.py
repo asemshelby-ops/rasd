@@ -6,7 +6,7 @@ The rooms and times here are made up for these tests.
 from datetime import datetime, timedelta
 
 from rasd.data import load_expected, load_reports
-from rasd.incidents import MERGE_WINDOW_MINUTES, group_reports
+from rasd.incidents import MERGE_WINDOW_MINUTES, add_report, group_reports
 from rasd.routing import DEADLINE_MINUTES
 from rasd.understand import Understanding
 
@@ -176,6 +176,88 @@ def test_a_report_the_model_could_not_read_never_merges():
         confidence="low", needs_confirmation=True, reasons=("not_understood",),
     )
     assert grouped((0, unread), (1, unread)) == [[1], [2]]
+
+
+# --- closed incidents -------------------------------------------------------
+
+
+def after(minutes: int) -> datetime:
+    return START + timedelta(minutes=minutes)
+
+
+def test_a_new_incident_is_open():
+    assert group_reports(arrivals((0, report())))[0].closed_at is None
+
+
+def test_a_report_about_a_closed_incident_opens_a_new_incident():
+    incidents = group_reports(arrivals((0, report())))
+    incidents[0].closed_at = after(10)
+
+    # Same problem, same room, well inside the merging window: but the first incident is closed.
+    new = add_report(incidents, 2, after(20), report())
+
+    assert [i.report_ids for i in incidents] == [[1], [2]]
+    assert new is incidents[1]
+    assert new.closed_at is None
+
+
+def test_a_closed_incident_is_left_exactly_as_it_was():
+    incidents = group_reports(arrivals((0, report()), (5, report())))
+    incidents[0].closed_at = after(10)
+    add_report(incidents, 3, after(20), report(urgency="urgent"))
+    closed = incidents[0]
+    assert closed.report_ids == [1, 2]
+    assert closed.last_at == after(5)
+    assert closed.urgency == "medium"
+
+
+def test_later_reports_join_the_new_incident_and_not_the_closed_one():
+    incidents = group_reports(arrivals((0, report())))
+    incidents[0].closed_at = after(10)
+    add_report(incidents, 2, after(20), report())
+    add_report(incidents, 3, after(25), report())
+    assert [i.report_ids for i in incidents] == [[1], [2, 3]]
+
+
+def test_closing_one_incident_does_not_stop_merging_in_another_room():
+    incidents = group_reports(arrivals((0, report()), (1, report(loc_number="355"))))
+    incidents[0].closed_at = after(10)
+    add_report(incidents, 3, after(20), report(loc_number="355"))
+    assert [i.report_ids for i in incidents] == [[1], [2, 3]]
+
+
+# --- adding one report at a time, as the live system will ----------------------
+
+
+def test_the_first_report_starts_the_first_incident():
+    incidents = []
+    first = add_report(incidents, 1, START, report())
+    assert incidents == [first]
+    assert first.report_ids == [1]
+
+
+def test_a_report_added_later_joins_the_open_incident_and_that_incident_is_returned():
+    incidents = []
+    first = add_report(incidents, 1, START, report())
+    second = add_report(incidents, 2, after(5), report())
+    assert second is first
+    assert first.report_ids == [1, 2]
+    assert len(incidents) == 1
+
+
+def test_adding_one_at_a_time_gives_the_same_incidents_as_grouping_all_at_once():
+    items = arrivals((0, report()), (3, report(loc_number="355")), (9, report()), (200, report()))
+    one_by_one = []
+    for report_id, sent_at, r in items:
+        add_report(one_by_one, report_id, sent_at, r)
+    assert [i.report_ids for i in one_by_one] == [i.report_ids for i in group_reports(items)]
+
+
+def test_the_window_can_be_changed_when_adding_one_report():
+    incidents = []
+    add_report(incidents, 1, START, report(), window_minutes=10)
+    add_report(incidents, 2, after(15), report(), window_minutes=10)
+    assert [i.report_ids for i in incidents] == [[1], [2]]
 
 
 # --- the incident as a whole ----------------------------------------------

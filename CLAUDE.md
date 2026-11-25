@@ -16,33 +16,48 @@ everything in its list below. Built: `data/reports.csv` (35 fictional reports),
 merging), `rasd/scoring.py`, `rasd/cost.py`, `benchmark.py`, and the empty
 holdout folder `data/holdout/`.
 
-**Measured on 25 November 2026** with the real key (full reports in
-`comparison/`, and the table in `README.md`):
+**All measurements are from 25 November 2026** (table in `README.md`).
+
+The one-time comparison, with the prompt as it was then (full reports in
+`comparison/`):
 
 - `claude-haiku-5-5`: all fields right on 30 of 35; 1 confident mistake (an
-  urgency, not a place); 0 wrong places that were not sent to the supervisor;
-  spoken room numbers 11 of 13; grouping 32 of 35; about $0.009 per run.
+  urgency, not a place); spoken room numbers 11 of 13; grouping 32 of 35; about
+  $0.009 per run. Three runs that day gave 32, 30 and 30 of 35.
 - `claude-sonnet-5-5`: 35 of 35 on everything; about $0.13 per run.
-- Haiku varies between runs: three runs the same day gave 32, 30 and 30 of 35.
-- Haiku reads the Palestinian word for twelve ("طنعش") as another number
-  (reports 2 and 14). Our parser reads it correctly, so both were flagged.
-- Haiku does not copy Arabic-Indic digits as written into `number_words`
-  (report 21), so that correct report is flagged needlessly.
 
-**The larger-model comparison has been run (once, 25 November 2026). Do not run
-it again** unless the owner says so in the chat. `benchmark.py --compare`
-refuses while `comparison/answers.json` exists.
+Then two fixes the owner approved were made: the prompt now shows the dialect
+words for 11 to 19 (generated from the tables in `rasd/numbers.py`), and a room
+number is confirmed when its exact digits are written in the message, even if
+the model's quote is not a copy. Three runs on `claude-haiku-5-5` after the
+fixes: all fields right on 35, 32 and 35 of 35; spoken room numbers 13 of 13 and
+grouping 35 of 35 in all three; confident mistakes 0, 2 and 0, never a place.
+The fixes were written after seeing these same reports, so this proves little
+about new messages. The larger model has not been run with the new prompt.
 
-**The prompt has not been tuned** since the first real run: the owner has not
-asked for it. Two fixes were proposed and are waiting for the owner's decision:
-a table of dialect words for 11 to 19 in the prompt, and accepting a number
-whose digits appear in the message even when the quote does not match.
+**Open question for the owner: urgency.** The two confident mistakes were
+urgency (reports 1 and 14). Cause, found by measuring: the urgency rule does not
+say whether a danger the message does not state (heat that stops sleep, a group
+leaving in an hour) counts as urgent, so Haiku decides either way with high
+confidence. Sent 12 times, report 1 came back urgent 5 times; report 14 came
+back medium once. Nothing was changed. Options put to the owner: make the rule
+explicit, or send the report to the supervisor when the model hesitates.
 
-The owner has not written the holdout reports yet, so they have no results, and
-the larger model was not measured on them.
+In no benchmark run so far did a wrong place go unflagged.
 
-Next: the owner's decisions above, then step 5 (speech to text) when the owner
-says so. Do not start Phase 2 until Phase 1 works and the owner says so.
+**Larger model.** The owner plans to use the larger model for the demo;
+`DEFAULT_MODEL` is still `claude-haiku-5-5` until the owner says to switch. The
+comparison on the 35 main reports ran once and is not repeated. The owner
+approved one more comparison of both models **on the holdout set only**, and
+only after the owner's holdout files exist. That command is not built yet:
+`benchmark.py --compare` refuses while `comparison/answers.json` exists. Build
+it and test it offline first, then run it once.
+
+The owner has not written the holdout reports yet, so they have no results.
+
+Next: the owner's answer on urgency, the holdout comparison when the files
+exist, then step 5 (speech to text) when the owner says so. Do not start Phase 2
+until Phase 1 works and the owner says so.
 
 Confirmed by the owner on 25 November 2026:
 
@@ -52,22 +67,17 @@ Confirmed by the owner on 25 November 2026:
 - A report the system could not understand (API down, refusal, no answer) goes
   to the supervisor as `unclear` and `urgent`.
 - No refusal fallback to another model: a refusal becomes a flagged report.
-
-Choices that the owner has not confirmed yet:
-
-- The number parser covers Arabic only. A number spoken in Urdu words cannot be
-  re-read, so that report is flagged.
-- Merging window: 60 minutes, counted from the incident's latest message
-  (`MERGE_WINDOW_MINUTES` in `rasd/incidents.py`).
-- A report that needs supervisor confirmation for any reason never merges, and
-  nothing merges into it. A common area never merges (we do not know which one).
-- An incident is as urgent as its most urgent message.
-- The benchmark never prints the text of holdout reports, only their numbers
-  with expected and actual values.
-- The benchmark's `--model` option was replaced by `--compare MODEL`, which runs
-  both models on the same reports and saves the record in `comparison/`.
-- The benchmark waits and retries up to 6 times when the API says slow down
-  (the live system keeps 2).
+- The number parser covers Arabic only. A number spoken in Urdu words goes to
+  the supervisor, for now.
+- Merging: the window is 60 minutes, counted from the incident's latest message
+  (`MERGE_WINDOW_MINUTES` in `rasd/incidents.py`). A report that needs supervisor
+  confirmation never merges and nothing merges into it. A common area never
+  merges. An incident is as urgent as its most urgent message.
+- A new report about an incident that is already closed opens a new incident
+  (`Incident.closed_at`). Nothing closes an incident until Phase 2.
+- The benchmark never prints the text of holdout reports; `--compare MODEL`
+  replaced `--model`; the benchmark retries up to 6 times when the API says
+  slow down (the live system keeps 2).
 
 ## How to work
 
@@ -81,11 +91,35 @@ Choices that the owner has not confirmed yet:
 - Do not edit the test reports or expected answers to make results look better.
   Do not put test report text or its room numbers into the prompt as examples.
 
+## Skills plan (set by the owner on 25 November 2026, for the whole project)
+
+- `superpowers:test-driven-development` for any new logic that decides a
+  report's room, type, owner or incident: the failing test first, then the code.
+- `superpowers:verification-before-completion` before reporting any result:
+  show only output that was actually seen printed.
+- If a confident mistake appears, `superpowers:systematic-debugging` to find the
+  real cause before changing anything, and explain the cause to the owner in
+  one line.
+- When Phase 1 is finished, `engineering:testing-strategy` to list what must be
+  tested before a live demo in front of judges: noisy rooms, a bad network, an
+  old phone browser, two reports at the same second.
+- In Phase 2, `frontend-design` for the phone page and the big board (Arabic,
+  right to left, readable from the back of a hall, looking like a real
+  operations tool), then `design:ux-copy` for every button, status and error
+  message, then `design:accessibility-review` on the big board.
+- Before the owner hands the code to teammates,
+  `superpowers:requesting-code-review`, and fix what it finds.
+- If a skill is not available in the session, tell the owner which one and
+  continue without it. On 25 November 2026 `frontend-design` was not available;
+  the others were.
+
 ## Hard rules
 
 - **Cost.** The Claude credit is $100 prepaid. Print the approximate API cost
   after every benchmark run. Stop if any single run costs more than $1.
-- **Larger-model comparison: run it once only.** It was run on 25 November 2026.
+- **Larger-model comparison: run it once only.** It was run on the 35 main
+  reports on 25 November 2026. The owner approved exactly one more: both models
+  on the holdout set only, and not before the owner's holdout files exist.
 - **Holdout.** `data/holdout/reports.csv` and `data/holdout/expected.csv` are
   written by the owner. Never open, print, search or copy them, including
   through git (`diff`, `show`, `log -p`), and never load them in unit tests.
@@ -126,8 +160,9 @@ Choices that the owner has not confirmed yet:
   say numbers in dialect words; the engine must convert them to digits. Planned
   safeguard: the model also quotes the exact words it read the number from, and
   our own code re-reads that quote with a small dialect number parser; if the
-  two disagree or the quote cannot be checked, the report is flagged. Report
-  room accuracy for the `room_in_words` reports separately.
+  two disagree or the quote cannot be checked, the report is flagged. A number
+  whose exact digits are written in the message is confirmed without the quote.
+  Report room accuracy for the `room_in_words` reports separately.
 - **How step 2 calls Claude:** SDK `anthropic` 2.x,
   `client.messages.parse(output_format=Reading)` with `effort` set to `medium`
   and thinking left on its default. Tests use the real SDK with only the network
@@ -137,7 +172,9 @@ Choices that the owner has not confirmed yet:
   team may change.
 - **Duplicate merging** (step 3): same type, same place, within a configurable
   window becomes one incident with a message count. No location or unclear type
-  never merges.
+  never merges. A closed incident takes no more reports. `add_report` places one
+  report as it arrives (for the live system); `group_reports` does a whole list
+  (for the benchmark).
 - **Benchmark** (step 4): one command. Accuracy per field, Arabic (30) and Urdu
   (5) shown separately, every wrong report listed with expected and actual,
   duplicate-grouping score, measured cost and time. An empty cell in
