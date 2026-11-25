@@ -14,12 +14,15 @@ what a problem means for the pilgrim at each point of the journey. It was not
 fitted to the test reports.
 """
 
+from rasd.numbers import normalise
 from rasd.schema import RISKS, STAGES, URGENCIES
 
 OWNER_BY_TYPE = {
     "lost_pilgrim": "pilgrim_affairs",
     "health": "pilgrim_affairs",
     "nusuk_card": "pilgrim_affairs",
+    "no_nusuk_card": "pilgrim_affairs",
+    "forgot_credentials": "pilgrim_affairs",
     "luggage": "luggage_team",
     "ac": "maintenance",
     "water": "maintenance",
@@ -27,6 +30,7 @@ OWNER_BY_TYPE = {
     "power_elevator": "maintenance",
     "gifts": "pilgrim_affairs",
     "unclear": "supervisor",
+    "not_a_report": "nobody",
 }
 
 # The default priority of each type of report.
@@ -34,6 +38,8 @@ PRIORITY_BY_TYPE = {
     "lost_pilgrim": "critical",
     "health": "critical",
     "nusuk_card": "urgent",
+    "no_nusuk_card": "urgent",
+    "forgot_credentials": "medium",
     "ac": "urgent",
     "water": "urgent",
     "power_elevator": "urgent",
@@ -41,6 +47,7 @@ PRIORITY_BY_TYPE = {
     "cleaning": "normal",
     "gifts": "normal",
     "unclear": "urgent",  # nobody knows what it is yet, so it may be anything
+    "not_a_report": "normal",  # never shown: a message that is not a report has no priority
 }
 
 # The types that are faults in the building. Only these can be "partial".
@@ -54,7 +61,150 @@ CURRENT_STAGE = "makkah"
 # What a stage changes. During the Hajj days the Nusuk card is needed to enter
 # the holy sites and the transport, so losing it is critical.
 PRIORITY_IN_STAGE = {
-    "hajj": {"nusuk_card": "critical"},
+    "hajj": {"nusuk_card": "critical", "no_nusuk_card": "critical"},
+}
+
+# ---------------------------------------------------------------------------
+# Hotels
+# ---------------------------------------------------------------------------
+
+# SAMPLE NAMES. These hotels are invented. Replace them with the company's own
+# hotels: the names are the tap-buttons of the question "which hotel?".
+HOTELS = ["واحة الروضة", "برج السكينة", "دار المنارة", "نزل الياسمين"]
+HOTELS_ARE_SAMPLE_DATA = True
+
+_HOTEL_WORDS = {"فندق", "الفندق", "بفندق", "hotel", "هوتيل", "اوتيل", "هوٹل"}
+_URDU_LETTERS = str.maketrans({"ک": "ك", "ی": "ي", "ہ": "ه", "ھ": "ه", "ے": "ي"})
+
+
+def _folded(text: str) -> list[str]:
+    """The words of a hotel name with one spelling per letter, Arabic or Urdu, without the word "hotel"."""
+    return [word for word in normalise(text.translate(_URDU_LETTERS)).lower().split() if word not in _HOTEL_WORDS]
+
+
+def match_hotel(text: str) -> str | None:
+    """The hotel a piece of text names: one of HOTELS when we know it, otherwise the name as written.
+
+    None when the text names no hotel.
+    """
+    words = _folded(text)
+    if not words:
+        return None
+    wanted = f" {' '.join(words)} "
+    names = {hotel: f" {' '.join(_folded(hotel))} " for hotel in HOTELS}
+    # The whole name of a hotel we know is in the text.
+    for hotel, name in names.items():
+        if name in wanted:
+            return hotel
+    # The text is a part of the name of exactly one hotel we know: people often
+    # leave out a first word such as "نزل" or "برج". A part two hotels share is not guessed.
+    partly = [hotel for hotel, name in names.items() if wanted in name]
+    if len(partly) == 1:
+        return partly[0]
+    written = [word for word in text.split() if _folded(word)]
+    return " ".join(written)
+
+
+# ---------------------------------------------------------------------------
+# What a report needs before it can go to its owner
+# ---------------------------------------------------------------------------
+
+# Places that are identified by a number. Without the number nobody can be sent there.
+NUMBERED_PLACES = ("room", "elevator", "floor")
+
+# place          = a numbered room, floor or elevator, or a named common area
+# hotel_or_place = a hotel, or a place as above
+# who            = the pilgrim's name, or a numbered place where to find them
+REQUIRED_BY_TYPE = {
+    "lost_pilgrim": ("hotel_or_place",),
+    "health": ("hotel_or_place",),
+    "nusuk_card": ("hotel_or_place", "who"),
+    "no_nusuk_card": ("hotel_or_place", "who"),
+    "forgot_credentials": ("hotel_or_place", "who"),
+    "luggage": ("hotel_or_place", "who"),
+    "ac": ("place",),
+    "water": ("place",),
+    "cleaning": ("place",),
+    "power_elevator": ("place",),
+    "gifts": ("hotel_or_place", "who"),
+    "unclear": (),
+    "not_a_report": (),
+}
+
+
+def missing_requirements(type: str, hotel, loc_kind: str, loc_number, pilgrim_name) -> tuple[str, ...]:
+    """What a report of this type still lacks, in the order of REQUIRED_BY_TYPE."""
+    numbered = loc_kind in NUMBERED_PLACES and loc_number is not None
+    placed = numbered or loc_kind == "common_area"
+    have = {
+        "place": placed,
+        "hotel_or_place": bool(hotel) or placed,
+        "who": bool(pilgrim_name) or numbered,
+    }
+    return tuple(need for need in REQUIRED_BY_TYPE[type] if not have[need])
+
+
+# ---------------------------------------------------------------------------
+# Checklists: what the owner collects or does for each type
+# ---------------------------------------------------------------------------
+
+CHECKLISTS = {
+    "lost_pilgrim": (
+        "اسم الحاج إن عُرف، أو وصفه",
+        "اللغة التي يتكلمها",
+        "أين هو الآن، أو أين شوهد آخر مرة ومتى",
+        "شركته وفندقه إن عُرفا",
+        "رقم جوال له أو لمرافقه",
+    ),
+    "health": (
+        "اسم الحاج",
+        "الفندق والغرفة",
+        "ما الذي يشكو منه",
+        "هل هو واعٍ ويتنفس",
+        "أمراضه المزمنة وأدويته",
+        "هل أُبلغ الفريق الطبي أو الإسعاف",
+    ),
+    "nusuk_card": (
+        "الاسم الكامل كما في الجواز",
+        "رقم التأشيرة",
+        "رقم الجواز",
+        "مكان الفقد",
+        "تاريخ الفقد ووقته",
+        "الشركة والفندق والغرفة",
+    ),
+    "no_nusuk_card": (
+        "الاسم الكامل كما في الجواز",
+        "رقم التأشيرة",
+        "رقم الجواز",
+        "تاريخ الوصول",
+        "الشركة والفندق والغرفة",
+    ),
+    "forgot_credentials": (
+        "الاسم الكامل كما في الجواز",
+        "ما الذي نسيه: كلمة مرور التطبيق أم رقم الجواز",
+        "رقم الجوال المسجّل في التطبيق",
+        "الشركة والفندق والغرفة",
+    ),
+    "luggage": (
+        "اسم الحاج",
+        "الفندق والغرفة",
+        "عدد الحقائب الناقصة ووصفها",
+        "رقم الرحلة وتاريخ الوصول",
+        "رقم ملصق الحقيبة إن وُجد",
+    ),
+    "ac": ("الفندق", "الغرفة أو الدور", "ما العطل بالضبط", "منذ متى", "هل في الغرفة مريض أو كبير في السن"),
+    "water": ("الفندق", "الغرفة أو الدور", "ما العطل بالضبط", "منذ متى", "هل في الغرفة مريض أو كبير في السن"),
+    "cleaning": ("الفندق", "الغرفة", "ما المطلوب: تنظيف أم مناشف أم مفارش"),
+    "power_elevator": (
+        "الفندق",
+        "الغرفة أو الدور أو رقم المصعد",
+        "ما العطل بالضبط",
+        "منذ متى",
+        "هل أحد عالق أو في خطر",
+    ),
+    "gifts": ("اسم الحاج أو الغرفة أو الدور", "الفندق", "ما الذي لم يُستلم", "تاريخ التوزيع"),
+    "unclear": ("ما المشكلة", "أين", "من الحاج"),
+    "not_a_report": (),
 }
 
 # TRIAL VALUES, in both tables below. These minutes are not measured and do not

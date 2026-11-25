@@ -15,7 +15,7 @@ a report: it goes to the supervisor, flagged, so that no message is ever lost.
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -35,7 +35,17 @@ from rasd.numbers import (
     spoken_number,
     teen_spellings,
 )
-from rasd.routing import ACKNOWLEDGE_MINUTES, DEADLINE_MINUTES, FAULT_TYPES, OWNER_BY_TYPE, priority_for
+from rasd.privacy import OTHER_MARK, PASSPORT_MARK, VISA_MARK, PrivateNumbers, redact
+from rasd.routing import (
+    ACKNOWLEDGE_MINUTES,
+    DEADLINE_MINUTES,
+    FAULT_TYPES,
+    NUMBERED_PLACES,
+    OWNER_BY_TYPE,
+    match_hotel,
+    missing_requirements,
+    priority_for,
+)
 from rasd.schema import CONFIDENCES, LOCATION_KINDS, RISKS, TYPES
 from rasd.text import to_western_digits
 
@@ -48,9 +58,6 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 EFFORT = "medium"
 # The most tokens one reply may use, thinking included. The answer itself is small.
 MAX_TOKENS = 4000
-
-# Places that are identified by a number. Without the number nobody can be sent there.
-NUMBERED_PLACES = ("room", "elevator", "floor")
 
 
 # ---------------------------------------------------------------------------
@@ -67,42 +74,63 @@ OTHER_HUNDRED_ENDINGS = "، ".join(as_written(ending) for ending in HUNDRED_ENDI
 # Rule for this prompt: never paste benchmark reports or their room numbers in
 # here as examples. tests/test_understand.py checks it.
 SYSTEM_PROMPT = f"""\
-You read short messages from reception staff in a hotel that houses Hajj pilgrims. \
-Each message reports a problem a pilgrim has. The staff member speaks the message \
-and a speech-to-text program writes it down, so it is informal and may contain \
-small mistakes. Messages are in Saudi or Palestinian Arabic dialect, or in Urdu.
+You read short messages from the staff of a company that serves Hajj pilgrims in \
+several hotels. Most messages report a problem a pilgrim has. They come from \
+staff phones into one busy group, typed or spoken and written down by a \
+speech-to-text program, so they are informal and messy: the pilgrim's name, the \
+problem, the hotel and the room may come in any order, on separate lines, with \
+bullets, dashes or emojis, and with small mistakes. Messages are in Saudi or \
+Palestinian Arabic dialect, or in Urdu.
 
-Read the message and fill in the fields below. Use only what the message says. \
-The report goes to a worker who acts on it, and a wrong room number sends that \
-worker to the wrong door. So when the message does not state something, leave it \
-empty or answer unclear instead of guessing.
+Read the whole message and fill in the fields below. Use only what the message \
+says. The report goes to a worker who acts on it, and a wrong room number sends \
+that worker to the wrong door. So when the message does not state something, \
+leave it empty or answer unclear instead of guessing.
+
+A token such as {PASSPORT_MARK}, {VISA_MARK} or {OTHER_MARK} stands for a number \
+that was hidden before the message reached you. It is never a room number, and \
+you never copy it into a field.
 
 type - what the problem is:
 - lost_pilgrim: a pilgrim is lost or missing, or cannot communicate (nobody \
 understands their language, or they cannot say who they are or where they stay)
 - health: a pilgrim is sick, hurt or in a medical emergency, and that is what the \
 message reports
-- nusuk_card: a pilgrim lost their Nusuk card (the Hajj permit card)
+- nusuk_card: a pilgrim's Nusuk card (the Hajj permit card) is lost or damaged
+- no_nusuk_card: a pilgrim has no Nusuk card at all: it was never issued to them \
+or they never received it
+- forgot_credentials: a pilgrim forgot the password of their app, or forgot \
+their passport number
 - luggage: bags that did not arrive, or a missing bag
 - ac: a fault in the air conditioning
 - water: no water, or a fault in the water supply
 - cleaning: the room needs cleaning, towels or bed linen
 - power_elevator: an electricity fault (power, lights, sockets) or an elevator fault
-- gifts: gifts or hospitality items that pilgrims did not receive
-- unclear: the message does not say what the problem is, or it is none of the above
+- gifts: gifts, meals or other distributions that pilgrims did not receive
+- unclear: the message reports a problem but does not say what it is, or it is \
+none of the above
+- not_a_report: the message reports no problem of a pilgrim. For example staff \
+attendance, notes of a meeting, a file sent with no request, a greeting or small \
+talk, or a reply to an earlier message such as "found it", "done" or a thumbs-up
 When the message reports a fault or a loss and also mentions a sick or elderly \
 pilgrim, the type is the fault or the loss. Use health only when the pilgrim's \
 condition is itself what needs help.
 
-location_kind - where the problem is. For a pilgrim who is lost or sick, it is \
-the place the message gives for that pilgrim, such as their room:
+hotel - the name of the hotel the message gives, copied as it is written, \
+without the word for "hotel". Leave it empty when the message names no hotel.
+
+location_kind - where the problem is inside the hotel. For a pilgrim who is lost \
+or sick, or whose card or bag the report is about, it is the place the message \
+gives for that pilgrim, such as their room:
 - room: one guest room
 - elevator: an elevator
 - floor: a whole floor, or a shared part of one floor such as its corridor
 - common_area: a shared place that has no number, such as the lobby or the restaurant
 - none: the message does not say where
 If the problem is in one room but the message does not give that room's number, \
-answer room and leave the number empty, even when the floor is mentioned.
+answer room and leave the number empty, even when the floor is mentioned. A hotel \
+alone is not a location_kind: answer none when the message gives a hotel and no \
+room, floor or other place.
 
 number_words - the words or digits that give the number of that room, elevator or \
 floor, copied exactly as they are written in the message. Copy only the number, \
@@ -127,6 +155,10 @@ From 300 on, these words may end in {OTHER_HUNDRED_ENDINGS} instead of \
 {as_written(HUNDRED_ENDINGS[0])}, and the last letter ة may be written ه.
 If the speaker corrects the number, use the number they end with.
 Other numbers in the message, such as counts, times and durations, are not the location.
+
+pilgrim_name - the name of the pilgrim the report is about, copied as it is \
+written, without a title such as الحاج or الحاجة. Leave it empty when the message \
+gives no pilgrim's name. The names of staff are not the pilgrim's name.
 
 risks - dangers that the message states in its own words. Most messages state \
 none, and then the list is empty. Add one entry for each kind below that the \
@@ -154,8 +186,11 @@ runs, or one socket out of several that stopped working. Leave it empty when the
 message does not say so. Never decide by yourself that a fault is small.
 
 confidence:
-- high: the message states every field clearly
-- low: you had to guess a field, or the message is vague or contradicts itself
+- high: what the message does state is clear
+- low: you had to guess something you filled in, or the message contradicts \
+itself, or it is too vague to tell what the problem is
+A field the message simply does not give (no hotel, no name, no room) is not a \
+reason for low confidence: leave that field empty and answer high.
 """
 
 
@@ -172,9 +207,11 @@ class Risk(pydantic.BaseModel):
 # There is no priority field: the model is not asked how urgent a report is.
 class Reading(pydantic.BaseModel):
     type: Literal[tuple(TYPES)]
+    hotel: str
     location_kind: Literal[tuple(LOCATION_KINDS)]
     number_words: str
     location_number: str
+    pilgrim_name: str
     risks: list[Risk]
     partial_words: str
     confidence: Literal[tuple(CONFIDENCES)]
@@ -202,9 +239,20 @@ class Understanding:
     partial: bool = False  # True when the message itself says the fault is only partial
     partial_words: str = ""  # the words the model quoted for that
     acknowledge_minutes: int | None = None  # minutes to say "I am on it"; only critical reports have this step
+    hotel: str | None = None  # the hotel's name: one of routing.HOTELS when we know it
+    pilgrim_name: str | None = None  # NEVER show the full name on the big screen: use display.screen_label
+    photo_attached: bool = False  # only that a photo came with the message; the photo is never analysed here
+    has_passport_number: bool = False  # the message gave one; the number itself is kept apart (privacy.py)
+    has_visa_number: bool = False
+    asked: bool = False  # True once the one allowed question was put to the sender (askback.py)
     input_tokens: int = 0  # what the call used, for the cost
     output_tokens: int = 0
     error: str | None = None  # for developers: why the model gave no answer
+
+    @property
+    def is_report(self) -> bool:
+        """False for a message that is not a report at all (attendance, chat, a reply)."""
+        return self.type != "not_a_report"
 
 
 def _number_is_confirmed(message: str, quote: str, number: str) -> bool:
@@ -219,18 +267,79 @@ def _number_is_confirmed(message: str, quote: str, number: str) -> bool:
     return contains_words(message, quote) and spoken_number(quote) == number
 
 
+# Reasons that come from what the report still lacks. They are worked out again
+# whenever a field is filled in later (askback.py); the other reasons are not.
+REQUIREMENT_REASONS = ("unclear_type", "no_location", "no_pilgrim")
+
+
+def requirement_reasons(type: str, hotel, loc_kind: str, loc_number, pilgrim_name) -> list[str]:
+    """Why a report cannot go to its owner yet: codes from REQUIREMENT_REASONS."""
+    reasons = []
+    if type == "unclear":
+        reasons.append("unclear_type")
+    missing = missing_requirements(type, hotel, loc_kind, loc_number, pilgrim_name)
+    if "place" in missing or "hotel_or_place" in missing:
+        reasons.append("no_location")
+    if "who" in missing:
+        reasons.append("no_pilgrim")
+    return reasons
+
+
+def settle(report: Understanding, stage: str | None = None) -> Understanding:
+    """Works out again everything that follows from a report's fields: owner, priority,
+    deadlines and whether the supervisor must confirm it. Use it after a field changed."""
+    urgency = priority_for(report.type, report.risks, stage or routing.CURRENT_STAGE, report.partial)
+    kept = [reason for reason in report.reasons if reason not in REQUIREMENT_REASONS]
+    reasons = requirement_reasons(report.type, report.hotel, report.loc_kind, report.loc_number, report.pilgrim_name)
+    reasons += kept
+    return replace(
+        report,
+        urgency=urgency,
+        owner=OWNER_BY_TYPE[report.type],
+        deadline_minutes=DEADLINE_MINUTES[urgency],
+        acknowledge_minutes=ACKNOWLEDGE_MINUTES.get(urgency),
+        needs_confirmation=bool(reasons),
+        reasons=tuple(reasons),
+    )
+
+
 def build_report(
-    message: str, reading: Reading, input_tokens: int = 0, output_tokens: int = 0, stage: str | None = None
+    message: str,
+    reading: Reading,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    stage: str | None = None,
+    photo_attached: bool = False,
+    private: PrivateNumbers = PrivateNumbers(),
 ) -> Understanding:
     """Applies our rules to the model's reading. No AI in here.
 
     stage is the stage of the journey (a code from schema.STAGES). When it is
-    not given, the one set in routing.py is used.
+    not given, the one set in routing.py is used. private holds the numbers
+    that were taken out of the message; only the fact that they exist is kept.
     """
+    extras = dict(
+        photo_attached=photo_attached,
+        has_passport_number=bool(private.passport),
+        has_visa_number=bool(private.visa),
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
+    type = reading.type
+    if type == "not_a_report":
+        if reading.confidence == "high":
+            return _not_a_report(**extras)
+        # Dropping a real report by mistake is the worst outcome. When the model is
+        # not sure the message is nothing, a person looks at it.
+        type = "unclear"
+
     kind = reading.location_kind
     number = "".join(to_western_digits(reading.location_number).split()) or None
     if kind not in NUMBERED_PLACES:
         number = None
+    # The hotel and the pilgrim's name are kept only when their words are really in the message.
+    hotel = match_hotel(reading.hotel) if contains_words_in_order(message, reading.hotel) else None
+    name = reading.pilgrim_name.strip() if contains_words_in_order(message, reading.pilgrim_name) else None
 
     # The risks the model says the message states: kind -> the words it quoted.
     quoted = {}
@@ -238,15 +347,11 @@ def build_report(
         quoted.setdefault(risk.kind, risk.words)
     risks = tuple(risk for risk in RISKS if risk in quoted)
     # A fault counts as partial only when the words the model quoted for it are really in the message.
-    says_partial = bool(reading.partial_words.strip()) and reading.type in FAULT_TYPES
+    says_partial = bool(reading.partial_words.strip()) and type in FAULT_TYPES
     partial = says_partial and contains_words_in_order(message, reading.partial_words)
-    urgency = priority_for(reading.type, risks, stage or routing.CURRENT_STAGE, partial)
+    urgency = priority_for(type, risks, stage or routing.CURRENT_STAGE, partial)
 
-    reasons = []
-    if reading.type == "unclear":
-        reasons.append("unclear_type")
-    if kind == "none" or (kind in NUMBERED_PLACES and number is None):
-        reasons.append("no_location")
+    reasons = requirement_reasons(type, hotel, kind, number, name)
     if number is not None and not _number_is_confirmed(message, reading.number_words, number):
         reasons.append("number_not_confirmed")
     # A risk counts even when its words are not found in the message, because the
@@ -261,11 +366,11 @@ def build_report(
         reasons.append("low_confidence")
 
     return Understanding(
-        type=reading.type,
+        type=type,
         loc_kind=kind,
         loc_number=number,
         urgency=urgency,
-        owner=OWNER_BY_TYPE[reading.type],
+        owner=OWNER_BY_TYPE[type],
         deadline_minutes=DEADLINE_MINUTES[urgency],
         confidence=reading.confidence,
         needs_confirmation=bool(reasons),
@@ -276,30 +381,47 @@ def build_report(
         partial=partial,
         partial_words=reading.partial_words if partial else "",
         acknowledge_minutes=ACKNOWLEDGE_MINUTES.get(urgency),
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
+        hotel=hotel,
+        pilgrim_name=name or None,
+        **extras,
     )
 
 
-def _not_understood(error: str, input_tokens: int = 0, output_tokens: int = 0) -> Understanding:
-    """The report we give when the model gave no answer: straight to the supervisor.
+def _not_a_report(**extras) -> Understanding:
+    """A message that is not a report: it goes to nobody and never reaches the board."""
+    return Understanding(
+        type="not_a_report",
+        loc_kind="none",
+        loc_number=None,
+        urgency="normal",
+        owner=OWNER_BY_TYPE["not_a_report"],
+        deadline_minutes=DEADLINE_MINUTES["normal"],
+        confidence="high",
+        needs_confirmation=False,
+        reasons=(),
+        **extras,
+    )
+
+
+def _needs_a_person(reason: str, error: str | None = None, **extras) -> Understanding:
+    """A report nobody could classify: straight to the supervisor.
 
     It is marked urgent because nobody has read it yet, so we cannot rule out
     an emergency. The owner approved this rule.
     """
+    urgency = "urgent"
     return Understanding(
         type="unclear",
         loc_kind="none",
         loc_number=None,
-        urgency="urgent",
+        urgency=urgency,
         owner=OWNER_BY_TYPE["unclear"],
-        deadline_minutes=DEADLINE_MINUTES["urgent"],
+        deadline_minutes=DEADLINE_MINUTES[urgency],
         confidence="low",
         needs_confirmation=True,
-        reasons=("not_understood",),
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
+        reasons=(reason,),
         error=error,
+        **extras,
     )
 
 
@@ -324,40 +446,63 @@ def make_client(env_file: Path = PROJECT_DIR / ".env") -> anthropic.Anthropic:
 
 
 def understand(
-    message: str, client: anthropic.Anthropic, model: str = DEFAULT_MODEL, stage: str | None = None
+    message: str,
+    client: anthropic.Anthropic,
+    model: str = DEFAULT_MODEL,
+    stage: str | None = None,
+    photo_attached: bool = False,
 ) -> Understanding:
     """Turns the text of one staff message into a report. Never raises on a model failure.
 
     stage is the stage of the journey; when it is not given, the one set in routing.py is used.
+    photo_attached only records that a photo came with the message.
+
+    Passport and visa numbers are taken out before the text goes to the model.
+    To get those numbers for the pilgrim-affairs record, call privacy.redact(message).
     """
-    if not message.strip():
-        return _not_understood("the message is empty")
+    safe_message, private = redact(message)
+    extras = dict(
+        photo_attached=photo_attached,
+        has_passport_number=bool(private.passport),
+        has_visa_number=bool(private.visa),
+    )
+    if not safe_message.strip():
+        if photo_attached:
+            return _needs_a_person("unclear_type", **extras)  # a photo and no words: ask what the problem is
+        return _needs_a_person("not_understood", "the message is empty", **extras)
+
+    def failed(error: str, input_tokens: int = 0, output_tokens: int = 0) -> Understanding:
+        return _needs_a_person(
+            "not_understood", error, input_tokens=input_tokens, output_tokens=output_tokens, **extras
+        )
 
     try:
         reply = client.messages.parse(
             model=model,
             max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": message}],
+            messages=[{"role": "user", "content": safe_message}],
             output_format=Reading,
             output_config={"effort": EFFORT},
         )
     except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
-        return _not_understood(f"the Claude key was rejected, check {KEY_VARIABLE} ({e.status_code})")
+        return failed(f"the Claude key was rejected, check {KEY_VARIABLE} ({e.status_code})")
     except anthropic.NotFoundError:
-        return _not_understood(f"the model '{model}' was not found")
+        return failed(f"the model '{model}' was not found")
     except anthropic.RateLimitError:
-        return _not_understood("too many requests, the API asked us to slow down")
+        return failed("too many requests, the API asked us to slow down")
     except anthropic.APIStatusError as e:
-        return _not_understood(f"the API answered with error {e.status_code}: {e.message}")
+        return failed(f"the API answered with error {e.status_code}: {e.message}")
     except anthropic.APIConnectionError:
-        return _not_understood("could not reach the API (network problem or timeout)")
+        return failed("could not reach the API (network problem or timeout)")
     except pydantic.ValidationError:
-        return _not_understood("the reply was not in the expected shape (it may have been cut off)")
+        return failed("the reply was not in the expected shape (it may have been cut off)")
 
     tokens = (reply.usage.input_tokens, reply.usage.output_tokens)
     if reply.stop_reason == "refusal":
-        return _not_understood("the model refused to read this message", *tokens)
+        return failed("the model refused to read this message", *tokens)
     if reply.parsed_output is None:
-        return _not_understood(f"the model gave no answer (stop reason: {reply.stop_reason})", *tokens)
-    return build_report(message, reply.parsed_output, *tokens, stage=stage)
+        return failed(f"the model gave no answer (stop reason: {reply.stop_reason})", *tokens)
+    return build_report(
+        safe_message, reply.parsed_output, *tokens, stage=stage, photo_attached=photo_attached, private=private
+    )

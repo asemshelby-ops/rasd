@@ -12,25 +12,36 @@ the answers to the render functions:
 from dataclasses import dataclass
 from itertools import zip_longest
 
+from rasd.askback import ask_back
 from rasd.cost import MAX_RUN_COST_USD, cost_usd
 from rasd.data import EXPECTED_STAGE, NO_NUMBER, Expected, SampleReport
 from rasd.incidents import MERGE_WINDOW_MINUTES, group_reports
+from rasd.numbers import normalise
+from rasd.privacy import redact
+from rasd.routing import match_hotel
 from rasd.schema import FLAG_REASONS, LOCATION_KINDS, OWNERS, RISKS, STAGES, TYPES, URGENCIES, location_label
 from rasd.understand import Understanding
 
 # The scored fields, in the order they are printed, with their Arabic names.
 FIELDS = {
     "type": "النوع",
+    "hotel": "الفندق",
     "loc_kind": "نوع المكان",
     "loc_number": "رقم المكان",
+    "name": "اسم الحاج",
     "urgency": "الأولوية",
     "owner": "الجهة المسؤولة",
     "needs_confirmation": "الإحالة لتأكيد المشرف",
+    "ask": "السؤال للمرسل",
 }
-# What the engine understood from the message. The supervisor flag is scored
-# too, but it is a decision about these fields, not one of them.
-CONTENT_FIELDS = ("type", "loc_kind", "loc_number", "urgency", "owner")
-PLACE_FIELDS = ("loc_kind", "loc_number")
+# What the engine understood from the message. The supervisor flag and the
+# question to the sender are scored too, but they are decisions about these
+# fields, not fields of the message.
+CONTENT_FIELDS = ("type", "hotel", "loc_kind", "loc_number", "name", "urgency", "owner")
+PLACE_FIELDS = ("hotel", "loc_kind", "loc_number")
+
+# What Rasd may ask the sender about, in Arabic.
+ASK_LABELS = {"type": "نوع المشكلة", "place": "الغرفة أو الدور", "hotel": "الفندق", "name": "اسم الحاج"}
 
 # The groups each accuracy is shown for.
 LANGUAGE_GROUPS = {
@@ -100,8 +111,10 @@ def score(expected: Expected, actual: Understanding) -> dict[str, bool | None]:
     expected_number = None if expected.loc_number == NO_NUMBER else expected.loc_number
     return {
         "type": actual.type == expected.type,
+        "hotel": None if expected.hotel is None else actual.hotel == _wanted(expected.hotel, match_hotel),
         "loc_kind": actual.loc_kind == expected.loc_kind if location_is_scored else None,
         "loc_number": actual.loc_number == expected_number if location_is_scored else None,
+        "name": None if expected.name is None else _same_name(actual.pilgrim_name, _wanted(expected.name)),
         "urgency": actual.urgency == expected.urgency if expected.urgency is not None else None,
         "owner": actual.owner == expected.owner,
         "needs_confirmation": (
@@ -109,7 +122,25 @@ def score(expected: Expected, actual: Understanding) -> dict[str, bool | None]:
             if expected.needs_confirmation is not None
             else None
         ),
+        "ask": None if expected.ask is None else asked(actual) == _wanted(expected.ask),
     }
+
+
+def _wanted(cell: str, read=lambda value: value):
+    """The value an expected cell asks for: None for "-", otherwise the cell (through read)."""
+    return None if cell == NO_NUMBER else read(cell)
+
+
+def _same_name(actual: str | None, wanted: str | None) -> bool:
+    if actual is None or wanted is None:
+        return actual is wanted
+    return normalise(actual) == normalise(wanted)
+
+
+def asked(actual: Understanding) -> str | None:
+    """What Rasd would ask the sender of this report about: a code from data.ASK_FIELDS, or None."""
+    question = ask_back(actual)
+    return question.field if question else None
 
 
 def outcome(marks: dict[str, bool | None], actual: Understanding) -> str | None:
@@ -136,6 +167,11 @@ class Grouping:
 
     expected: list[list[int]]
     produced: list[list[int]]
+
+    @property
+    def total(self) -> int:
+        """How many reports are grouped: the messages that are not reports are left out."""
+        return sum(len(incident) for incident in self.expected)
 
     @property
     def well_placed(self) -> int:
@@ -213,17 +249,24 @@ class Tally:
 
     @property
     def grouping(self) -> Grouping | None:
-        """None when the incident column is not filled in for every report."""
+        """None when the incident column is not filled in for every report.
+
+        Messages that are expected not to be reports are left out. A real report
+        that the engine dropped as "not a report" is in no incident, so it counts
+        as standing alone.
+        """
+        real = [r for r in self.done if self.expected[r.id].type != "not_a_report"]
         wanted = {}
-        for r in self.done:
+        for r in real:
             incident = self.expected[r.id].incident
             if incident is None:
                 return None
             wanted.setdefault(incident, []).append(r.id)
-        made = group_reports([(r.id, r.sent_at, self.run.results[r.id]) for r in self.done])
+        made = group_reports([(r.id, r.sent_at, self.run.results[r.id]) for r in real])
+        dropped = [[r.id] for r in real if not self.run.results[r.id].is_report]
         return Grouping(
             expected=[sorted(ids) for ids in wanted.values()],
-            produced=[sorted(incident.report_ids) for incident in made],
+            produced=[sorted(incident.report_ids) for incident in made] + dropped,
         )
 
 
@@ -245,8 +288,30 @@ def _shown(field: str, value) -> str:
         return "نعم" if value else "لا"
     if field == "loc_number":
         return value if value and value != NO_NUMBER else "بلا رقم"
+    if field == "hotel":
+        return (match_hotel(value) or value) if value and value != NO_NUMBER else "لا فندق"
+    if field == "name":
+        return value if value and value != NO_NUMBER else "لا اسم"
+    if field == "ask":
+        return ASK_LABELS[value] if value and value != NO_NUMBER else "لا سؤال"
     labels = {"type": TYPES, "loc_kind": LOCATION_KINDS, "urgency": URGENCIES, "owner": OWNERS}[field]
     return labels[value]
+
+
+def _actual_value(field: str, actual: Understanding):
+    """What the engine answered for one scored field."""
+    if field == "name":
+        return actual.pilgrim_name
+    if field == "ask":
+        return asked(actual)
+    return getattr(actual, field)
+
+
+def _printable(report: SampleReport) -> str:
+    """The words of a message as they may be printed: no passport or visa number, on one line."""
+    safe, _ = redact(report.text)
+    text = " / ".join(line.strip() for line in safe.splitlines() if line.strip()) or "(بلا نص)"
+    return text + (" [مع صورة]" if report.photo else "")
 
 
 def _fraction(right: int, total: int) -> str:
@@ -300,7 +365,7 @@ def _confident_lines(t: Tally) -> list[str]:
     if confident:
         lines.append(f"  - أرقامها: {_ids(r.id for r in confident)}")
     lines += [
-        f"منها بمكان خاطئ (نوعه أو رقمه): {len(t.confident_wrong_places)}",
+        f"منها بمكان خاطئ (الفندق أو نوعه أو رقمه): {len(t.confident_wrong_places)}",
         f"بلاغات فيها خطأ وأُحيلت للمشرف: {len(t.with_outcome(CAUGHT_MISTAKE))}",
         f"إحالات للمشرف بلا داعٍ (البلاغ مفهوم صحيحاً): {len(t.with_outcome(NEEDLESS_REFERRAL))}",
     ]
@@ -352,11 +417,14 @@ def _wrong_report_lines(t: Tally, show_text: bool) -> list[str]:
     for r in wrong:
         actual, wanted = t.run.results[r.id], t.expected[r.id]
         header = f"البلاغ {r.id} ({_language(r)}، {t.outcomes[r.id]}):"
-        lines.append(f"{header} {r.text}" if show_text else header)
+        lines.append(f"{header} {_printable(r)}" if show_text else header)
         for field, name in FIELDS.items():
             if t.scores[r.id][field] is not False:
                 continue
-            line = f"  - {name}: المتوقع «{_shown(field, getattr(wanted, field))}»، الناتج «{_shown(field, getattr(actual, field))}»"
+            if field == "name" and not show_text:
+                lines.append(f"  - {name}: لا يطابق المتوقع")  # a name from a holdout report is never printed
+                continue
+            line = f"  - {name}: المتوقع «{_shown(field, getattr(wanted, field))}»، الناتج «{_shown(field, _actual_value(field, actual))}»"
             if field == "loc_number" and actual.number_words and show_text:
                 line += f" (قرأه النموذج من: «{actual.number_words}»)"
             if field == "urgency":
@@ -365,6 +433,42 @@ def _wrong_report_lines(t: Tally, show_text: bool) -> list[str]:
                 line += " (السبب: " + "، ".join(FLAG_REASONS[reason] for reason in actual.reasons) + ")"
             lines.append(line)
     return lines
+
+
+def _not_report_lines(t: Tally) -> list[str]:
+    """Messages that are not reports: how many were recognised, and whether a real report was dropped."""
+
+    def is_chat(answer) -> bool:
+        return not answer.is_report
+
+    chats = [r for r in t.done if t.expected[r.id].type == "not_a_report"]
+    recognised = [r for r in chats if is_chat(t.run.results[r.id])]
+    taken_as_reports = [r for r in chats if not is_chat(t.run.results[r.id])]
+    dropped = [r for r in t.done if t.expected[r.id].type != "not_a_report" and is_chat(t.run.results[r.id])]
+    lines = [
+        "== الرسائل التي ليست بلاغات ==",
+        f"رسائل ليست بلاغات وعُرفت كذلك: {len(recognised)} من {len(chats)}",
+        f"رسائل ليست بلاغات وعُدّت بلاغاً: {len(taken_as_reports)}",
+    ]
+    if taken_as_reports:
+        lines.append(f"  - أرقامها: {_ids(r.id for r in taken_as_reports)}")
+    lines.append(f"بلاغات حقيقية أُسقطت على أنها ليست بلاغاً: {len(dropped)}")
+    if dropped:
+        lines.append(f"  - أرقامها: {_ids(r.id for r in dropped)}")
+    return lines
+
+
+def _ask_lines(t: Tally) -> list[str]:
+    """The one question Rasd puts to a sender when a report lacks something it needs."""
+    scored = [r for r in t.done if t.expected[r.id].ask is not None]
+    should_ask = [r for r in scored if t.expected[r.id].ask != NO_NUMBER]
+    right = [r for r in should_ask if t.scores[r.id]["ask"]]
+    needless = [r for r in scored if t.expected[r.id].ask == NO_NUMBER and asked(t.run.results[r.id])]
+    return [
+        "== سؤال المرسل ==",
+        f"بلاغات يجب أن يُسأل مرسلها، وسُئل السؤال الصحيح: {len(right)} من {len(should_ask)}",
+        f"بلاغات سُئل مرسلها بلا داعٍ: {len(needless)}",
+    ]
 
 
 def _grouping_lines(t: Tally) -> list[str]:
@@ -377,7 +481,7 @@ def _grouping_lines(t: Tally) -> list[str]:
         return lines + ["لم يُحتسب: العمود incident في جدول الإجابات المتوقعة غير مكتمل."]
     lines += [
         f"عدد الحوادث: المتوقع {len(grouping.expected)}، الناتج {len(grouping.produced)}",
-        f"بلاغات في حادثتها الصحيحة: {_fraction(grouping.well_placed, len(t.done))}",
+        f"بلاغات في حادثتها الصحيحة: {_fraction(grouping.well_placed, grouping.total)}",
         f"حوادث مكررة جُمعت كاملة: {len(grouping.collected)} من {len(grouping.repeated)}",
         f"حوادث تفرّقت بلاغاتها (تكرار لم يُدمج): {len(grouping.split)}",
     ]
@@ -399,6 +503,8 @@ def _set_lines(t: Tally, show_text: bool) -> list[str]:
         _confident_lines(t),
         _accuracy_lines(t),
         _spoken_room_lines(t),
+        _not_report_lines(t),
+        _ask_lines(t),
         _wrong_report_lines(t, show_text),
         _grouping_lines(t),
     ):
@@ -511,7 +617,7 @@ def render_comparison(
         "== الأخطاء الواثقة: خطأ لم يُحَل للمشرف ==",
         f"بلاغات فيها خطأ ولم تُحَل للمشرف: الأصغر {len(a.with_outcome(CONFIDENT_MISTAKE))} "
         f"| الأكبر {len(b.with_outcome(CONFIDENT_MISTAKE))}",
-        f"منها بمكان خاطئ (نوعه أو رقمه): الأصغر {len(a.confident_wrong_places)} "
+        f"منها بمكان خاطئ (الفندق أو نوعه أو رقمه): الأصغر {len(a.confident_wrong_places)} "
         f"| الأكبر {len(b.confident_wrong_places)}",
         f"بلاغات فيها خطأ وأُحيلت للمشرف: الأصغر {len(a.with_outcome(CAUGHT_MISTAKE))} "
         f"| الأكبر {len(b.with_outcome(CAUGHT_MISTAKE))}",
@@ -546,8 +652,8 @@ def render_comparison(
         lines.append(
             _side_by_side(
                 "بلاغات في حادثتها الصحيحة",
-                (a.grouping.well_placed, len(a.done)),
-                (b.grouping.well_placed, len(b.done)),
+                (a.grouping.well_placed, a.grouping.total),
+                (b.grouping.well_placed, b.grouping.total),
             )
         )
 

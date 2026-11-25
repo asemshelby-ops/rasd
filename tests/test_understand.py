@@ -24,9 +24,11 @@ def reading(**changes) -> Reading:
     """A clear, correct reading of MESSAGE. Tests change one field at a time."""
     fields = dict(
         type="water",
+        hotel="",
         location_kind="room",
         number_words="تسعمية وسبعة",
         location_number="907",
+        pilgrim_name="",
         risks=[],
         partial_words="",
         confidence="high",
@@ -155,6 +157,121 @@ def test_one_unconfirmed_risk_among_confirmed_ones_is_enough_to_ask_the_supervis
     report = build_report(RISKY_MESSAGE, reading(type="cleaning", risks=stated))
     assert report.urgency == "urgent"
     assert report.reasons == ("risk_not_confirmed",)
+
+
+# --- real field style: hotel, pilgrim's name, what each type needs --------------
+
+LOST_CARD = "نبيل سعد الدين ضيّع بطاقة نسك 😔 فندق برج السكينة"
+
+
+def lost_card(**changes) -> Reading:
+    """A reading of LOST_CARD: a name, a hotel and no room."""
+    fields = dict(
+        type="nusuk_card", hotel="برج السكينة", location_kind="none", number_words="", location_number="",
+        pilgrim_name="نبيل سعد الدين",
+    )  # fmt: skip
+    fields.update(changes)
+    return reading(**fields)
+
+
+def test_the_hotel_is_stored_apart_from_the_room():
+    report = build_report("المكيف واقف، برج السكينة غرفة 907", reading(type="ac", hotel="برج السكينة", number_words="907"))
+    assert report.hotel == "برج السكينة"
+    assert (report.loc_kind, report.loc_number) == ("room", "907")
+
+
+def test_a_hotel_we_know_is_stored_under_its_own_spelling():
+    report = build_report("المكيف واقف في فندق برج السكينه غرفة 907", reading(type="ac", hotel="برج السكينه", number_words="907"))
+    assert report.hotel == "برج السكينة"
+
+
+def test_a_hotel_we_do_not_know_is_kept_as_written():
+    report = build_report("المكيف واقف في فندق قصر الغيم غرفة 907", reading(type="ac", hotel="قصر الغيم", number_words="907"))
+    assert report.hotel == "قصر الغيم"
+
+
+def test_a_hotel_that_is_not_in_the_message_is_not_stored():
+    report = build_report(MESSAGE, reading(hotel="برج السكينة"))
+    assert report.hotel is None
+
+
+def test_no_hotel_in_the_message_means_no_hotel():
+    assert build_report(MESSAGE, reading()).hotel is None
+
+
+def test_a_nusuk_card_report_with_a_name_and_a_hotel_but_no_room_does_not_go_to_the_supervisor():
+    report = build_report(LOST_CARD, lost_card())
+    assert report.hotel == "برج السكينة"
+    assert report.pilgrim_name == "نبيل سعد الدين"
+    assert report.loc_number is None
+    assert report.needs_confirmation is False
+    assert report.reasons == ()
+
+
+def test_a_fault_with_a_hotel_but_no_room_or_floor_goes_to_the_supervisor():
+    report = build_report("الموية مقطوعة في برج السكينة", lost_card(type="water", pilgrim_name=""))
+    assert report.hotel == "برج السكينة"
+    assert report.reasons == ("no_location",)
+
+
+def test_a_nusuk_card_report_with_neither_a_hotel_nor_a_room_goes_to_the_supervisor():
+    report = build_report("نبيل سعد الدين ضيّع بطاقة نسك", lost_card(hotel=""))
+    assert report.reasons == ("no_location",)
+
+
+def test_a_nusuk_card_report_that_does_not_say_whose_card_goes_to_the_supervisor():
+    report = build_report("في حاج ضيّع بطاقة نسك في فندق برج السكينة", lost_card(pilgrim_name=""))
+    assert report.reasons == ("no_pilgrim",)
+
+
+def test_the_pilgrims_name_is_stored_only_when_it_is_in_the_message():
+    assert build_report(LOST_CARD, lost_card()).pilgrim_name == "نبيل سعد الدين"
+    assert build_report(LOST_CARD, lost_card(pilgrim_name="منصور خليل")).pilgrim_name is None
+    assert build_report(MESSAGE, reading()).pilgrim_name is None
+
+
+def test_a_photo_is_only_recorded_as_attached():
+    assert build_report(LOST_CARD, lost_card(), photo_attached=True).photo_attached is True
+    assert build_report(LOST_CARD, lost_card()).photo_attached is False
+
+
+# --- messages that are not reports ---------------------------------------------
+
+CHAT = "صباح الخير يا شباب ☀️"
+
+
+def not_a_report(**changes) -> Reading:
+    fields = dict(type="not_a_report", location_kind="none", number_words="", location_number="")
+    fields.update(changes)
+    return reading(**fields)
+
+
+def test_a_message_that_is_not_a_report_goes_to_nobody_and_needs_no_supervisor():
+    report = build_report(CHAT, not_a_report())
+    assert report.type == "not_a_report"
+    assert report.is_report is False
+    assert report.owner == "nobody"
+    assert report.needs_confirmation is False
+    assert report.reasons == ()
+
+
+def test_a_real_report_is_a_report():
+    assert build_report(MESSAGE, reading()).is_report is True
+
+
+def test_when_the_model_is_not_sure_it_is_not_a_report_a_person_looks_at_it():
+    # Dropping a real report by mistake is the worst outcome, so doubt keeps the message.
+    report = build_report(CHAT, not_a_report(confidence="low"))
+    assert report.type == "unclear"
+    assert report.is_report is True
+    assert report.owner == "supervisor"
+    assert report.needs_confirmation is True
+    assert "unclear_type" in report.reasons
+
+
+def test_what_the_model_read_in_a_non_report_is_not_kept():
+    report = build_report("تحضير اليوم غرفة 907 نبيل حاضر", not_a_report(location_kind="room", number_words="907", location_number="907", pilgrim_name="نبيل"))
+    assert (report.loc_kind, report.loc_number, report.pilgrim_name, report.hotel) == ("none", None, None, None)
 
 
 # --- a fault the message says is only partial --------------------------------
@@ -431,6 +548,45 @@ def test_understand_returns_the_risks_the_model_reported():
     assert (report.risks, report.urgency) == (("elderly",), "medium")
 
 
+def test_understand_sends_western_digits_to_the_model_whatever_the_message_used():
+    sent = []
+
+    def handler(request):
+        sent.append(request)
+        return api_message([GOOD_ANSWER])
+
+    understand("ما في موية في غرفة ٩٠٧ الدور ۹", client_answering(handler))
+    content = json.loads(sent[0].content)["messages"][0]["content"]
+    assert content == "ما في موية في غرفة 907 الدور 9"
+
+
+def test_understand_records_that_a_photo_was_attached():
+    client = client_answering(lambda request: api_message([GOOD_ANSWER]))
+    assert understand(MESSAGE, client, photo_attached=True).photo_attached is True
+    assert understand(MESSAGE, client).photo_attached is False
+
+
+def test_a_photo_with_no_words_is_an_unclear_report_and_the_model_is_not_called():
+    def handler(request):
+        raise AssertionError("the model must not be called when there are no words")
+
+    report = understand("  ", client_answering(handler), photo_attached=True)
+    assert report.type == "unclear"
+    assert report.photo_attached is True
+    assert report.needs_confirmation is True
+    assert report.reasons == ("unclear_type",)
+    assert report.error is None
+
+
+def test_a_failed_call_still_records_the_photo():
+    def handler(request):
+        raise httpx2.ConnectError("no internet", request=request)
+
+    report = understand(MESSAGE, client_answering(handler), photo_attached=True)
+    assert report.photo_attached is True
+    assert report.reasons == ("not_understood",)
+
+
 def assert_sent_to_supervisor(report):
     assert report.type == "unclear"
     assert report.urgency == "urgent"
@@ -546,6 +702,25 @@ def test_the_prompt_lists_the_word_for_six_hundred():
 def test_the_prompt_says_the_ending_of_the_hundreds_can_change():
     for ending in HUNDRED_ENDINGS[1:]:
         assert ending in normalise(SYSTEM_PROMPT)
+
+
+def test_the_prompt_asks_for_the_hotel_and_the_pilgrims_name_as_separate_fields():
+    for field in ("hotel", "pilgrim_name"):
+        assert field in Reading.model_fields
+        assert f"\n{field} - " in SYSTEM_PROMPT
+
+
+def test_the_prompt_explains_the_placeholders_that_stand_for_hidden_numbers():
+    from rasd.privacy import OTHER_MARK, PASSPORT_MARK, VISA_MARK
+
+    for mark in (PASSPORT_MARK, VISA_MARK, OTHER_MARK):
+        assert mark in SYSTEM_PROMPT
+
+
+def test_the_prompt_says_that_an_empty_field_is_not_a_reason_for_low_confidence():
+    # With more fields to fill, the model began to answer "low" for clear messages
+    # that simply give no hotel or no name.
+    assert "is not a reason for low confidence" in SYSTEM_PROMPT
 
 
 def test_the_prompt_asks_for_the_words_that_say_a_fault_is_partial():

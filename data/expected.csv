@@ -1,43 +1,59 @@
-﻿id,type,loc_kind,loc_number,urgency,owner,incident,needs_confirmation,room_in_words,risks,partial,note
-1,ac,room,412,urgent,maintenance,1,0,0,,0,heat and no sleep are not a stated risk
-2,ac,room,412,urgent,maintenance,1,0,1,,0,duplicate of 1; room said in Palestinian words
-3,ac,room,412,urgent,maintenance,1,0,0,,0,duplicate of 1; Arabic-Indic digits; the word room is missing
-4,nusuk_card,room,307,urgent,pilgrim_affairs,2,0,1,,0,
-5,luggage,room,618,medium,luggage_team,3,0,0,,0,
-6,luggage,room,618,medium,luggage_team,3,0,1,,0,duplicate of 5; room said digit by digit
-7,water,room,215,urgent,maintenance,4,0,1,,0,
-8,power_elevator,elevator,2,critical,maintenance,5,0,0,danger,0,people trapped
-9,power_elevator,elevator,2,critical,maintenance,5,0,0,danger,0,duplicate of 8; elevator number as an ordinal word
-10,power_elevator,elevator,2,critical,maintenance,5,0,0,danger,0,duplicate of 8 in Urdu
-11,cleaning,room,1104,normal,housekeeping,6,0,1,,0,
-12,power_elevator,room,509,urgent,maintenance,7,0,0,,0,
-13,ac,room,823,critical,maintenance,8,0,1,elderly sick,0,elderly pilgrim with breathing difficulty
-14,nusuk_card,room,1012,critical,pilgrim_affairs,9,0,1,time_limit,0,group leaves for the Haram in an hour
-15,unclear,none,-,,supervisor,10,1,0,,0,no problem and no place stated; urgency not scored
-16,ac,none,-,urgent,maintenance,11,1,0,,0,no room given
-17,water,floor,5,urgent,maintenance,12,0,0,,0,whole floor affected; no stated risk
-18,water,floor,5,urgent,maintenance,12,0,0,,0,duplicate of 17
-19,ac,room,726,urgent,maintenance,13,0,0,,0,
-20,luggage,room,1205,medium,luggage_team,14,0,1,,0,room said as twelve-zero-five; two bags is a distractor
-21,cleaning,room,304,normal,housekeeping,15,0,0,,0,Arabic-Indic digits
-22,power_elevator,room,931,critical,maintenance,16,0,1,danger,0,sparks and burning smell: immediate danger
-23,nusuk_card,room,202,urgent,pilgrim_affairs,17,,0,,0,speaker corrects the room from 220 to 202; flag not scored
-24,ac,room,412,urgent,maintenance,18,0,0,,0,same room and type as 1 but three hours later: a new incident
-25,water,room,716,urgent,maintenance,19,0,1,,0,
-26,cleaning,room,716,normal,housekeeping,20,0,0,,0,same room as 25 but a different type: a separate incident
-27,luggage,room,1418,medium,luggage_team,21,0,0,,0,
-28,power_elevator,elevator,4,critical,maintenance,22,0,0,elderly,0,elderly pilgrims forced to use the stairs
-29,ac,room,1107,medium,maintenance,23,0,1,,1,partial fault: still cooling
-30,power_elevator,floor,3,medium,maintenance,24,0,0,,1,partial fault: half the corridor bulbs
-31,water,,,urgent,maintenance,25,1,0,,0,room number forgotten; location not scored
-32,cleaning,room,512,normal,housekeeping,26,0,0,,0,
-33,power_elevator,room,1502,critical,maintenance,27,0,1,sick medication,0,medicine for a diabetic pilgrim at risk
-34,nusuk_card,room,908,urgent,pilgrim_affairs,28,0,0,,0,
-35,luggage,room,640,urgent,luggage_team,29,0,1,medication,0,her medicine is in the missing bag
-36,lost_pilgrim,room,527,critical,pilgrim_affairs,30,0,0,elderly alone_or_lost,0,went out after dawn and did not come back; no phone
-37,lost_pilgrim,room,233,critical,pilgrim_affairs,31,0,0,alone_or_lost,0,did not return from the Haram; no phone
-38,lost_pilgrim,common_area,-,critical,pilgrim_affairs,32,0,0,,0,cannot communicate; standing at the reception desk
-39,health,room,816,critical,pilgrim_affairs,33,0,0,sick,0,fainted and fell
-40,health,room,675,critical,pilgrim_affairs,34,0,1,sick,0,chest pain; room said in Palestinian words
-41,gifts,room,1310,normal,pilgrim_affairs,35,0,0,,0,
-42,gifts,room,445,medium,pilgrim_affairs,36,0,0,time_limit,0,bus to the airport in two hours raises it one level
+﻿id,type,loc_kind,loc_number,urgency,owner,incident,needs_confirmation,room_in_words,hotel,name,risks,partial,ask,note
+1,ac,room,412,urgent,maintenance,1,0,0,-,-,,0,-,heat and no sleep are not a stated risk
+2,ac,room,412,urgent,maintenance,1,0,1,-,-,,0,-,duplicate of 1; room said in Palestinian words
+3,ac,room,412,urgent,maintenance,1,0,0,-,-,,0,-,duplicate of 1; Arabic-Indic digits; the word room is missing
+4,nusuk_card,room,307,urgent,pilgrim_affairs,2,0,1,-,-,,0,-,
+5,luggage,room,618,medium,luggage_team,3,0,0,-,-,,0,-,
+6,luggage,room,618,medium,luggage_team,3,0,1,-,-,,0,-,duplicate of 5; room said digit by digit
+7,water,room,215,urgent,maintenance,4,0,1,-,-,,0,-,
+8,power_elevator,elevator,2,critical,maintenance,5,0,0,-,-,danger,0,-,people trapped
+9,power_elevator,elevator,2,critical,maintenance,5,0,0,-,-,danger,0,-,duplicate of 8; elevator number as an ordinal word
+10,power_elevator,elevator,2,critical,maintenance,5,0,0,-,-,danger,0,-,duplicate of 8 in Urdu
+11,cleaning,room,1104,normal,housekeeping,6,0,1,-,-,,0,-,
+12,power_elevator,room,509,urgent,maintenance,7,0,0,-,-,,0,-,
+13,ac,room,823,critical,maintenance,8,0,1,-,-,elderly sick,0,-,elderly pilgrim with breathing difficulty
+14,nusuk_card,room,1012,critical,pilgrim_affairs,9,0,1,-,-,time_limit,0,-,group leaves for the Haram in an hour
+15,unclear,none,-,,supervisor,10,1,0,-,-,,0,type,no problem and no place stated; urgency not scored
+16,ac,none,-,urgent,maintenance,11,1,0,-,-,,0,place,no room given
+17,water,floor,5,urgent,maintenance,12,0,0,-,-,,0,-,whole floor affected; no stated risk
+18,water,floor,5,urgent,maintenance,12,0,0,-,-,,0,-,duplicate of 17
+19,ac,room,726,urgent,maintenance,13,0,0,-,-,,0,-,
+20,luggage,room,1205,medium,luggage_team,14,0,1,-,-,,0,-,room said as twelve-zero-five; two bags is a distractor
+21,cleaning,room,304,normal,housekeeping,15,0,0,-,-,,0,-,Arabic-Indic digits
+22,power_elevator,room,931,critical,maintenance,16,0,1,-,-,danger,0,-,sparks and burning smell: immediate danger
+23,nusuk_card,room,202,urgent,pilgrim_affairs,17,,0,-,-,,0,-,speaker corrects the room from 220 to 202; flag not scored
+24,ac,room,412,urgent,maintenance,18,0,0,-,-,,0,-,same room and type as 1 but three hours later: a new incident
+25,water,room,716,urgent,maintenance,19,0,1,-,-,,0,-,
+26,cleaning,room,716,normal,housekeeping,20,0,0,-,-,,0,-,same room as 25 but a different type: a separate incident
+27,luggage,room,1418,medium,luggage_team,21,0,0,-,-,,0,-,
+28,power_elevator,elevator,4,critical,maintenance,22,0,0,-,-,elderly,0,-,elderly pilgrims forced to use the stairs
+29,ac,room,1107,medium,maintenance,23,0,1,-,-,,1,-,partial fault: still cooling
+30,power_elevator,floor,3,medium,maintenance,24,0,0,-,-,,1,-,partial fault: half the corridor bulbs
+31,water,,,urgent,maintenance,25,1,0,-,-,,0,place,room number forgotten; location not scored
+32,cleaning,room,512,normal,housekeeping,26,0,0,-,-,,0,-,
+33,power_elevator,room,1502,critical,maintenance,27,0,1,-,-,sick medication,0,-,medicine for a diabetic pilgrim at risk
+34,nusuk_card,room,908,urgent,pilgrim_affairs,28,0,0,-,-,,0,-,
+35,luggage,room,640,urgent,luggage_team,29,0,1,-,-,medication,0,-,her medicine is in the missing bag
+36,lost_pilgrim,room,527,critical,pilgrim_affairs,30,0,0,-,-,elderly alone_or_lost,0,-,went out after dawn and did not come back; no phone
+37,lost_pilgrim,room,233,critical,pilgrim_affairs,31,0,0,-,-,alone_or_lost,0,-,did not return from the Haram; no phone
+38,lost_pilgrim,common_area,-,critical,pilgrim_affairs,32,0,0,-,-,,0,-,cannot communicate; standing at the reception desk
+39,health,room,816,critical,pilgrim_affairs,33,0,0,-,-,sick,0,-,fainted and fell
+40,health,room,675,critical,pilgrim_affairs,34,0,1,-,-,sick,0,-,chest pain; room said in Palestinian words
+41,gifts,room,1310,normal,pilgrim_affairs,35,0,0,-,-,,0,-,
+42,gifts,room,445,medium,pilgrim_affairs,36,0,0,-,-,time_limit,0,-,bus to the airport in two hours raises it one level
+43,nusuk_card,none,-,urgent,pilgrim_affairs,37,0,0,واحة الروضة,عبدالرحيم نورالدين,,0,-,"name first, then hotel; passport number given"
+44,ac,room,624,urgent,maintenance,38,0,0,برج السكينة,سليمان بكر,,0,-,"bullets, labelled fields, Arabic digits, name of the pilgrim"
+45,no_nusuk_card,room,309,urgent,pilgrim_affairs,39,0,1,دار المنارة,مريم عبدالقادر,,0,-,never had a card; room in words; visa number given
+46,forgot_credentials,none,-,medium,pilgrim_affairs,40,0,0,نزل الياسمين,يوسف ابراهيم,,0,-,no punctuation
+47,gifts,room,318,normal,pilgrim_affairs,41,0,0,برج السكينة,-,,0,-,Urdu; hotel written in Urdu letters
+48,gifts,floor,7,medium,pilgrim_affairs,42,0,0,واحة الروضة,-,elderly,0,-,distribution of meals; dashes; hotel first
+49,nusuk_card,none,-,urgent,pilgrim_affairs,43,1,0,دار المنارة,-,,0,name,hotel but no name: ask whose card
+50,water,none,-,urgent,maintenance,44,1,0,نزل الياسمين,-,,0,place,a fault with a hotel and no room: ask for the room
+51,unclear,none,-,,supervisor,45,1,0,-,-,,0,type,a photo with no words: ask what the problem is
+52,nusuk_card,room,508,urgent,pilgrim_affairs,46,0,0,برج السكينة,اسماعيل داود,,0,-,damaged card; emoji; mixed digits; name last; photo
+53,not_a_report,,,,nobody,,0,0,-,-,,0,-,staff attendance
+54,not_a_report,,,,nobody,,0,0,-,-,,0,-,notes of a meeting
+55,not_a_report,,,,nobody,,0,0,-,-,,0,-,a file with no request
+56,not_a_report,,,,nobody,,0,0,-,-,,0,-,a greeting
+57,not_a_report,,,,nobody,,0,0,-,-,,0,-,"a reply: found it, thumbs-up"
+58,not_a_report,,,,nobody,,0,0,-,-,,0,-,"thanks, in Urdu"

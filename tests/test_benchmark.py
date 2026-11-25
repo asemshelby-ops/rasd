@@ -41,8 +41,8 @@ def answer(input_tokens=1000, output_tokens=100) -> Understanding:
 def test_run_asks_about_every_report_and_keeps_each_answer():
     seen = []
 
-    def understand_one(text):
-        seen.append(text)
+    def understand_one(report):
+        seen.append(report.text)
         return answer()
 
     run = run_benchmark([sample(1), sample(2), sample(3)], understand_one, "claude-haiku-5-5")
@@ -56,8 +56,8 @@ def test_run_asks_about_every_report_and_keeps_each_answer():
 def test_run_stops_as_soon_as_the_cost_passes_the_limit():
     calls = []
 
-    def expensive(text):
-        calls.append(text)
+    def expensive(report):
+        calls.append(report.text)
         return answer(input_tokens=6_000_000, output_tokens=0)  # 0.60 dollars each on Haiku
 
     run = run_benchmark([sample(1), sample(2), sample(3), sample(4)], expensive, "claude-haiku-5-5", max_cost_usd=1.00)
@@ -69,7 +69,7 @@ def test_run_stops_as_soon_as_the_cost_passes_the_limit():
 def test_run_refuses_a_model_with_no_known_price_before_spending_anything():
     calls = []
     with pytest.raises(ValueError, match="rasd/cost.py"):
-        run_benchmark([sample(1)], lambda text: calls.append(text) or answer(), "some-new-model")
+        run_benchmark([sample(1)], lambda report: calls.append(report.text) or answer(), "some-new-model")
     assert calls == []
 
 
@@ -124,8 +124,8 @@ def test_access_check_reports_a_network_problem():
 def test_money_already_spent_counts_towards_the_limit():
     calls = []
 
-    def expensive(text):
-        calls.append(text)
+    def expensive(report):
+        calls.append(report.text)
         return answer(input_tokens=6_000_000, output_tokens=0)  # 0.60 dollars each on Haiku
 
     run = run_benchmark(
@@ -138,7 +138,7 @@ def test_money_already_spent_counts_towards_the_limit():
 def test_nothing_is_sent_when_the_limit_was_already_passed():
     calls = []
     run = run_benchmark(
-        [sample(1)], lambda text: calls.append(text) or answer(), "claude-haiku-5-5", max_cost_usd=1.00, already_spent_usd=1.20
+        [sample(1)], lambda report: calls.append(report.text) or answer(), "claude-haiku-5-5", max_cost_usd=1.00, already_spent_usd=1.20
     )
     assert calls == []
     assert run.results == {}
@@ -163,7 +163,7 @@ def test_measure_reads_the_main_reports_and_then_the_holdout_reports():
     seen = []
     holdout_set = ([held(1), held(2)], {1: expected_answer(1), 2: expected_answer(2)})
     run, holdout = measure(
-        "claude-haiku-5-5", lambda text: seen.append(text) or answer(), [sample(1), sample(2), sample(3)], holdout_set
+        "claude-haiku-5-5", lambda report: seen.append(report.text) or answer(), [sample(1), sample(2), sample(3)], holdout_set
     )
     assert seen == ["message 1", "message 2", "message 3", "held 1", "held 2"]
     assert sorted(run.results) == [1, 2, 3]
@@ -172,7 +172,7 @@ def test_measure_reads_the_main_reports_and_then_the_holdout_reports():
 
 
 def test_measure_gives_no_holdout_when_there_are_no_holdout_reports():
-    run, holdout = measure("claude-haiku-5-5", lambda text: answer(), [sample(1)], None)
+    run, holdout = measure("claude-haiku-5-5", lambda report: answer(), [sample(1)], None)
     assert sorted(run.results) == [1]
     assert holdout is None
 
@@ -180,8 +180,8 @@ def test_measure_gives_no_holdout_when_there_are_no_holdout_reports():
 def test_measure_shares_one_cost_limit_between_the_main_and_the_holdout_reports():
     seen = []
 
-    def expensive(text):
-        seen.append(text)
+    def expensive(report):
+        seen.append(report.text)
         return answer(input_tokens=4_000_000, output_tokens=0)  # 0.40 dollars each on Haiku
 
     holdout_set = ([held(1), held(2), held(3)], {i: expected_answer(i) for i in (1, 2, 3)})
@@ -195,7 +195,7 @@ def test_measure_tells_the_caller_which_set_it_is_reading():
     progress = []
     holdout_set = ([held(1)], {1: expected_answer(1)})
     measure(
-        "claude-haiku-5-5", lambda text: answer(), [sample(1), sample(2)], holdout_set,
+        "claude-haiku-5-5", lambda report: answer(), [sample(1), sample(2)], holdout_set,
         on_progress=lambda *step: progress.append(step),
     )  # fmt: skip
     assert progress == [("main", 1, 2), ("main", 2, 2), ("holdout", 1, 1)]
@@ -205,14 +205,16 @@ def test_measure_tells_the_caller_which_set_it_is_reading():
 
 GOOD_READING = {
     "type": "water",
+    "hotel": "",
     "location_kind": "room",
     "number_words": "",
     "location_number": "",
+    "pilgrim_name": "",
     "risks": [],
     "partial_words": "",
     "confidence": "high",
 }
-MAIN = len(load_reports())  # how many main reports there are
+MAIN = sum(1 for r in load_reports() if r.text)  # the main messages that are sent to the model (a photo alone is not)
 USAGE = {"input_tokens": 1000, "output_tokens": 100}  # what each offline answer says it used
 
 
@@ -265,7 +267,7 @@ def test_the_command_reads_every_main_report_prints_the_report_and_saves_it(offl
     assert "تقرير اختبار الدقة - رصد" in printed
     assert "التكلفة التقريبية" in printed
     saved = offline.results / f"benchmark_{DEFAULT_MODEL}.txt"
-    assert "البلاغات: 42 (العربية 36، الأردو 6)" in saved.read_text(encoding="utf-8-sig")
+    assert "البلاغات: 58 (العربية 50، الأردو 8)" in saved.read_text(encoding="utf-8-sig")
     assert not offline.comparison.exists()
 
 
@@ -310,7 +312,7 @@ def test_compare_saves_a_lasting_record_of_both_runs(offline):
 
     record = json.loads((folder / "answers.json").read_text(encoding="utf-8"))
     assert [run["model"] for run in record["runs"]] == [DEFAULT_MODEL, "claude-sonnet-5-5"]
-    assert all(len(run["answers"]) == MAIN for run in record["runs"])
+    assert all(len(run["answers"]) == MAIN + 1 for run in record["runs"])  # and the photo that came alone
     assert record["runs"][1]["answers"]["1"]["type"] == "water"
     assert record["recorded_at"]
 
@@ -343,7 +345,7 @@ def test_compare_does_not_store_the_answers_to_holdout_reports_in_the_record(off
     monkeypatch.setattr(benchmark, "load_holdout", lambda: holdout_set)
     benchmark.main(["--compare", "claude-sonnet-5-5"])
     record = json.loads((offline.comparison / "answers.json").read_text(encoding="utf-8"))
-    assert all(len(run["answers"]) == MAIN for run in record["runs"])
+    assert all(len(run["answers"]) == MAIN + 1 for run in record["runs"])  # and the photo that came alone
     assert len(offline.asked) == 2 * (MAIN + 2)
 
 
@@ -398,7 +400,7 @@ def test_repeat_prints_what_changed_between_the_runs(offline, capsys):
     benchmark.main(["--repeat", "3"])
     printed = capsys.readouterr().out
     assert "الثبات بين التشغيلات: 3 تشغيلات (البلاغات الأساسية)" in printed
-    assert f"بلاغات تغيّرت أولويتها بين التشغيلات: 0 من {MAIN}" in printed
+    assert f"بلاغات تغيّرت أولويتها بين التشغيلات: 0 من {MAIN + 1}" in printed
     assert "التكلفة التقريبية لهذا التشغيل كله (3 تشغيلات)" in printed
 
 
@@ -420,13 +422,13 @@ def test_repeat_also_compares_the_holdout_reports_between_runs_without_their_tex
 
 
 def test_one_cost_limit_covers_all_the_runs_of_a_repeat(offline, capsys, monkeypatch):
-    # 100,000 input tokens is 1 cent a report on the everyday model, so one pass over the
-    # main reports costs well under a dollar, and the dollar runs out during the third pass.
-    monkeypatch.setitem(USAGE, "input_tokens", 100_000)
+    # Each answer is made to cost so much that two and a half passes over the main
+    # reports cost one dollar: the dollar runs out in the middle of the third pass.
+    tokens_for_one_dollar = 10_000_000  # the everyday model costs 0.10 dollars per million input tokens
+    monkeypatch.setitem(USAGE, "input_tokens", int(tokens_for_one_dollar / (2.5 * MAIN)))
     monkeypatch.setitem(USAGE, "output_tokens", 0)
     benchmark.main(["--repeat", "3"])
     assert 2 * MAIN < len(offline.asked) < 3 * MAIN
-    assert len(offline.asked) == 101  # 1.00 dollar is not over the limit; the 101st report is
     assert "توقف الاختبار لأن التكلفة تجاوزت الحد" in capsys.readouterr().out
 
 

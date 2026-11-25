@@ -6,14 +6,17 @@ Code uses the short English codes. Screens and printed reports use the Arabic la
 TYPES = {
     "lost_pilgrim": "حاج تائه أو لا يستطيع التواصل",
     "health": "حالة صحية",
-    "nusuk_card": "فقدان بطاقة نسك",
+    "nusuk_card": "بطاقة نسك مفقودة أو تالفة",
+    "no_nusuk_card": "حاج بلا بطاقة نسك",
+    "forgot_credentials": "نسي كلمة المرور أو رقم الجواز",
     "luggage": "أمتعة لم تصل",
     "ac": "عطل تكييف",
     "water": "انقطاع الماء",
     "cleaning": "نظافة الغرفة",
     "power_elevator": "عطل كهرباء أو مصعد",
-    "gifts": "هدايا لم تُستلم",
+    "gifts": "هدايا أو توزيعات لم تُستلم",
     "unclear": "غير واضح",
+    "not_a_report": "ليست بلاغاً",
 }
 
 LOCATION_KINDS = {
@@ -56,6 +59,7 @@ OWNERS = {
     "maintenance": "الصيانة",
     "housekeeping": "التدبير الفندقي",
     "supervisor": "مشرف الوردية",
+    "nobody": "لا أحد (ليست بلاغاً)",
 }
 
 CONFIDENCES = {
@@ -67,6 +71,7 @@ CONFIDENCES = {
 FLAG_REASONS = {
     "unclear_type": "نوع البلاغ غير واضح",
     "no_location": "المكان غير مذكور أو رقمه ناقص",
+    "no_pilgrim": "لا يُعرف لمن البلاغ: لا اسم ولا غرفة",
     "number_not_confirmed": "رقم المكان لم يتأكد آلياً",
     "risk_not_confirmed": "خطر قرأه النموذج ولم يتأكد آلياً",
     "partial_not_confirmed": "عطل جزئي قرأه النموذج ولم يتأكد آلياً",

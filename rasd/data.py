@@ -10,6 +10,10 @@ Conventions in expected.csv:
   - urgency is the priority level; it is written for the journey stage EXPECTED_STAGE
   - risks (an optional column) lists the risks the message states, separated by spaces
   - partial (an optional column) is 1 when the message says the fault is only partial
+  - hotel, name and ask (optional columns): the hotel's name, the pilgrim's name, and
+    the field Rasd should ask the sender about; "-" means "none"
+In reports.csv the optional column photo is 1 when a photo came with the message;
+such a message may have no words.
 
 A mistake in a file stops the program with a message that names the file, the
 report number and the column. The messages never show the words of a report or
@@ -26,7 +30,8 @@ from rasd.text import to_western_digits
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 HOLDOUT_DIR = DATA_DIR / "holdout"
-NO_NUMBER = "-"
+NO_NUMBER = "-"  # in loc_number, hotel, name and ask: "none is expected"
+ASK_FIELDS = ("type", "place", "hotel", "name")  # what Rasd may ask the sender about
 
 # The stage of the journey that the expected priorities are written for. The
 # benchmark always scores with this stage, whatever routing.CURRENT_STAGE says.
@@ -44,7 +49,8 @@ class SampleReport:
     id: int
     sent_at: datetime
     lang: str  # ar-sa, ar-ps or ur
-    text: str
+    text: str  # may be empty when a photo came alone
+    photo: bool = False  # True when a photo came with the message
 
 
 @dataclass(frozen=True)
@@ -61,6 +67,9 @@ class Expected:
     note: str
     risks: tuple[str, ...] | None = None  # the risks the message states; None = the file has no risks column
     partial: bool = False  # True when the message says the fault is only partial
+    hotel: str | None = None  # None = not scored; "-" = the message names no hotel
+    name: str | None = None  # the pilgrim's name; None = not scored; "-" = no name
+    ask: str | None = None  # a code from ASK_FIELDS; None = not scored; "-" = no question
 
 
 def _name(path: Path) -> str:
@@ -130,10 +139,13 @@ def load_reports(path: Path = DATA_DIR / "reports.csv") -> list[SampleReport]:
         where = f"{file}, report {report_id}"
         if not (row["lang"].startswith("ar") or row["lang"] == "ur"):
             raise ValueError(f"{where}: the lang must be ar-sa, ar-ps or ur.")
-        if not row["text"]:
+        photo = bool(_yes_no(row.get("photo", ""), "photo", where))
+        if not row["text"] and not photo:
             raise ValueError(f"{where}: the text is empty.")
         reports.append(
-            SampleReport(id=report_id, sent_at=_time(row["sent_at"], where), lang=row["lang"], text=row["text"])
+            SampleReport(
+                id=report_id, sent_at=_time(row["sent_at"], where), lang=row["lang"], text=row["text"], photo=photo
+            )
         )
     return reports
 
@@ -150,6 +162,9 @@ def load_expected(path: Path = DATA_DIR / "expected.csv") -> dict[int, Expected]
             raise ValueError(f"{where}: the loc_number must be digits, or {NO_NUMBER} when no number is expected.")
         if row["incident"] and not row["incident"].isdigit():
             raise ValueError(f"{where}: the incident must be a whole number, or empty.")
+        ask = row.get("ask") or None
+        if ask not in (None, NO_NUMBER, *ASK_FIELDS):
+            raise ValueError(f"{where}: the ask is not valid. Allowed: {', '.join(ASK_FIELDS)}, or {NO_NUMBER}")
         risks = tuple(row["risks"].split()) if "risks" in row else None
         if risks and not set(risks) <= set(RISKS):
             raise ValueError(f"{where}: the risks are not valid. Allowed, separated by spaces: {', '.join(RISKS)}")
@@ -167,6 +182,9 @@ def load_expected(path: Path = DATA_DIR / "expected.csv") -> dict[int, Expected]
             note=row.get("note", ""),
             risks=risks,
             partial=bool(_yes_no(row.get("partial", ""), "partial", where)),
+            hotel=row.get("hotel") or None,
+            name=row.get("name") or None,
+            ask=ask,
         )
     return expected
 

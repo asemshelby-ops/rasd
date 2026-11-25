@@ -100,7 +100,7 @@ def test_a_lost_nusuk_card_is_urgent_in_the_other_stages(stage):
 
 def test_the_hajj_days_change_nothing_else():
     for type in TYPES:
-        if type != "nusuk_card":
+        if type not in ("nusuk_card", "no_nusuk_card"):
             assert priority_for(type, risks=(), stage="hajj") == PRIORITY_BY_TYPE[type]
 
 
@@ -185,3 +185,153 @@ def test_a_stated_risk_still_raises_a_partial_fault():
 def test_priority_never_goes_below_normal(monkeypatch):
     monkeypatch.setitem(PRIORITY_BY_TYPE, "water", "normal")
     assert priority_for("water", risks=(), stage="makkah", partial=True) == "normal"
+
+
+# --- stage 2: the new types ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "type, priority, owner",
+    [
+        ("no_nusuk_card", "urgent", "pilgrim_affairs"),
+        ("forgot_credentials", "medium", "pilgrim_affairs"),
+        ("gifts", "normal", "pilgrim_affairs"),
+        ("not_a_report", "normal", "nobody"),
+    ],
+)
+def test_priority_and_owner_of_the_types_added_for_real_reports(type, priority, owner):
+    assert priority_for(type, risks=(), stage="makkah") == priority
+    assert OWNER_BY_TYPE[type] == owner
+
+
+def test_a_pilgrim_with_no_nusuk_card_is_critical_during_the_hajj_days_like_a_lost_card():
+    assert priority_for("no_nusuk_card", risks=(), stage="hajj") == "critical"
+
+
+# --- hotels ------------------------------------------------------------------------
+
+from rasd.routing import CHECKLISTS, HOTELS, REQUIRED_BY_TYPE, match_hotel, missing_requirements  # noqa: E402
+
+
+def test_the_hotel_list_is_marked_as_sample_names():
+    from rasd import routing
+
+    assert routing.HOTELS_ARE_SAMPLE_DATA is True
+    assert len(HOTELS) >= 3
+
+
+def test_a_known_hotel_is_recognised_with_or_without_the_word_hotel():
+    known = HOTELS[0]
+    assert match_hotel(known) == known
+    assert match_hotel(f"فندق {known}") == known
+    assert match_hotel(f"  {known} ") == known
+
+
+def test_a_known_hotel_is_recognised_in_urdu_letters_and_other_spellings():
+    assert match_hotel("برج السکینہ") == "برج السكينة"
+    assert match_hotel("برج السكينه") == "برج السكينة"
+    assert match_hotel("ہوٹل برج السکینہ") == "برج السكينة"
+
+
+def test_an_unknown_hotel_is_kept_as_written_without_the_word_hotel():
+    assert match_hotel("فندق قصر الغيم") == "قصر الغيم"
+
+
+def test_no_hotel_is_none():
+    assert match_hotel("") is None
+    assert match_hotel("  ") is None
+    assert match_hotel("فندق") is None
+
+
+# --- what a report needs before it can go to its owner --------------------------------
+
+
+def missing(type, hotel=None, loc_kind="none", loc_number=None, name=None):
+    return missing_requirements(type, hotel=hotel, loc_kind=loc_kind, loc_number=loc_number, pilgrim_name=name)
+
+
+def test_every_type_says_what_it_needs():
+    assert set(REQUIRED_BY_TYPE) == set(TYPES)
+
+
+@pytest.mark.parametrize("type", ["ac", "water", "power_elevator", "cleaning"])
+def test_a_fault_needs_a_room_or_a_floor_and_a_hotel_alone_is_not_enough(type):
+    assert missing(type, hotel="برج السكينة") == ("place",)
+    assert missing(type, loc_kind="room", loc_number="907") == ()
+    assert missing(type, loc_kind="floor", loc_number="9") == ()
+    assert missing(type, loc_kind="elevator", loc_number="2") == ()
+    assert missing(type, loc_kind="room") == ("place",)  # a room without its number
+    assert missing(type, loc_kind="common_area") == ()
+
+
+def test_a_nusuk_card_report_with_the_pilgrims_name_and_hotel_needs_no_room():
+    assert missing("nusuk_card", hotel="برج السكينة", name="نبيل سعد") == ()
+
+
+def test_a_nusuk_card_report_needs_to_know_whose_card_it_is():
+    assert missing("nusuk_card", hotel="برج السكينة") == ("who",)
+    assert missing("nusuk_card", hotel="برج السكينة", loc_kind="room", loc_number="907") == ()
+
+
+def test_a_report_about_a_person_needs_a_hotel_or_a_place():
+    assert missing("nusuk_card", name="نبيل سعد") == ("hotel_or_place",)
+    assert missing("lost_pilgrim") == ("hotel_or_place",)
+    assert missing("lost_pilgrim", hotel="برج السكينة") == ()
+    assert missing("lost_pilgrim", loc_kind="common_area") == ()
+    assert missing("health", loc_kind="room", loc_number="907") == ()
+
+
+@pytest.mark.parametrize("type", ["nusuk_card", "no_nusuk_card", "forgot_credentials", "luggage", "gifts"])
+def test_types_about_one_pilgrims_things_need_a_name_or_a_numbered_place(type):
+    assert missing(type, hotel="برج السكينة") == ("who",)
+    assert missing(type, hotel="برج السكينة", name="نبيل سعد") == ()
+    assert missing(type, hotel="برج السكينة", loc_kind="floor", loc_number="7") == ()
+    assert missing(type) == ("hotel_or_place", "who")
+
+
+def test_an_unclear_report_and_a_message_that_is_not_a_report_need_nothing_more():
+    assert missing("unclear") == ()
+    assert missing("not_a_report") == ()
+
+
+# --- checklists ----------------------------------------------------------------------
+
+
+def test_every_type_has_a_checklist_and_only_a_non_report_has_an_empty_one():
+    assert set(CHECKLISTS) == set(TYPES)
+    for type, items in CHECKLISTS.items():
+        assert bool(items) == (type != "not_a_report"), type
+
+
+def test_the_lost_or_damaged_nusuk_card_checklist_is_the_one_the_team_gave():
+    assert list(CHECKLISTS["nusuk_card"]) == [
+        "الاسم الكامل كما في الجواز",
+        "رقم التأشيرة",
+        "رقم الجواز",
+        "مكان الفقد",
+        "تاريخ الفقد ووقته",
+        "الشركة والفندق والغرفة",
+    ]
+
+
+# --- a hotel named by part of its name ---------------------------------------------------
+
+
+def test_a_known_hotel_is_recognised_by_the_part_of_its_name_that_only_it_has():
+    # Staff, and the model, often leave out a first word such as "نزل" or "برج".
+    assert match_hotel("الياسمين") == "نزل الياسمين"
+    assert match_hotel("فندق الياسمين") == "نزل الياسمين"
+    assert match_hotel("السكينة") == "برج السكينة"
+
+
+def test_a_part_shared_by_two_known_hotels_is_not_guessed(monkeypatch):
+    from rasd import routing
+
+    monkeypatch.setattr(routing, "HOTELS", ["برج السكينة", "برج الواحة"])
+    assert match_hotel("برج") == "برج"
+    assert match_hotel("برج الواحة") == "برج الواحة"
+    assert match_hotel("السكينة") == "برج السكينة"
+
+
+def test_words_that_are_in_no_known_hotel_stay_as_written():
+    assert match_hotel("الياسمين الجديد") == "الياسمين الجديد"

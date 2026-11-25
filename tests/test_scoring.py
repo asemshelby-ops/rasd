@@ -60,11 +60,14 @@ def sample(id=1, lang="ar-sa", text="ما في موية في الغرفة", minu
 def test_a_fully_correct_answer_scores_true_on_every_field():
     assert score(expected(), answer()) == {
         "type": True,
+        "hotel": None,  # the expected answers of this report give no hotel, name or question to score
         "loc_kind": True,
         "loc_number": True,
+        "name": None,
         "urgency": True,
         "owner": True,
         "needs_confirmation": True,
+        "ask": None,
     }
 
 
@@ -193,9 +196,9 @@ def test_the_report_can_be_built_for_the_real_reports_even_when_nothing_was_unde
     reports, table = load_reports(), load_expected()
     results = {r.id: understand("", client=None) for r in reports}  # an empty message never reaches the model
     text = render(run_of(results), reports, table)
-    assert "البلاغات: 42 (العربية 36، الأردو 6)" in text
-    assert "بلاغات لم يُجب عنها النموذج: 42" in text
-    assert "رقم الغرفة صحيح: 0 من 14 (0%)" in text
+    assert "البلاغات: 58 (العربية 50، الأردو 8)" in text
+    assert "بلاغات لم يُجب عنها النموذج: 58" in text
+    assert "رقم الغرفة صحيح: 0 من 15 (0%)" in text
 
 
 # --- cost -----------------------------------------------------------------
@@ -225,7 +228,7 @@ def test_a_wrong_room_that_was_not_flagged_is_a_confident_mistake():
     section = confident_section(text)
     assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 1 من 2" in section
     assert "أرقامها: 2" in section
-    assert "منها بمكان خاطئ (نوعه أو رقمه): 1" in section
+    assert "منها بمكان خاطئ (الفندق أو نوعه أو رقمه): 1" in section
     assert "بلاغات فيها خطأ وأُحيلت للمشرف: 0" in section
 
 
@@ -235,20 +238,20 @@ def test_a_wrong_room_that_was_flagged_is_not_a_confident_mistake():
     section = confident_section(text)
     assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 0 من 1" in section
     assert "أرقامها" not in section
-    assert "منها بمكان خاطئ (نوعه أو رقمه): 0" in section
+    assert "منها بمكان خاطئ (الفندق أو نوعه أو رقمه): 0" in section
     assert "بلاغات فيها خطأ وأُحيلت للمشرف: 1" in section
 
 
 def test_a_wrong_kind_of_place_counts_as_a_wrong_place():
     text = render(run_of({1: answer(loc_kind="floor")}), [sample(1)], {1: expected(1)})
-    assert "منها بمكان خاطئ (نوعه أو رقمه): 1" in confident_section(text)
+    assert "منها بمكان خاطئ (الفندق أو نوعه أو رقمه): 1" in confident_section(text)
 
 
 def test_a_wrong_urgency_that_was_not_flagged_is_a_confident_mistake_but_not_a_wrong_place():
     text = render(run_of({1: answer(urgency="normal")}), [sample(1)], {1: expected(1)})
     section = confident_section(text)
     assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 1 من 1" in section
-    assert "منها بمكان خاطئ (نوعه أو رقمه): 0" in section
+    assert "منها بمكان خاطئ (الفندق أو نوعه أو رقمه): 0" in section
 
 
 def test_a_report_that_should_have_gone_to_the_supervisor_but_did_not_is_a_confident_mistake():
@@ -358,7 +361,7 @@ def test_the_real_reports_get_a_grouping_score_even_when_nothing_was_understood(
     reports, table = load_reports(), load_expected()
     results = {r.id: understand("", client=None) for r in reports}
     section = grouping_section(render(run_of(results), reports, table))
-    assert "عدد الحوادث: المتوقع 36، الناتج 42" in section
+    assert "عدد الحوادث: المتوقع 46، الناتج 52" in section
     assert "حوادث مكررة جُمعت كاملة: 0 من 4" in section
 
 
@@ -522,7 +525,7 @@ def test_comparison_shows_confident_mistakes_for_both_models():
     large.results[3] = answer(loc_number="335", input_tokens=1000, output_tokens=300)  # wrong and not flagged
     text = render_comparison(small, large, reports, table)
     assert "بلاغات فيها خطأ ولم تُحَل للمشرف: الأصغر 0 | الأكبر 1" in text
-    assert "منها بمكان خاطئ (نوعه أو رقمه): الأصغر 0 | الأكبر 1" in text
+    assert "منها بمكان خاطئ (الفندق أو نوعه أو رقمه): الأصغر 0 | الأكبر 1" in text
 
 
 def test_comparison_shows_the_cost_gap():
@@ -730,3 +733,140 @@ def test_the_partial_words_of_a_holdout_report_are_not_printed():
     text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)}, holdout=a_holdout(wrong))
     assert "وقرأ أن العطل جزئي)" in holdout_part(text)
     assert "كلمات محجوبة" not in text
+
+
+# --- stage 2: hotel, pilgrim's name, the question to the sender -----------------------------
+
+
+def test_the_hotel_is_scored_when_the_expected_answers_give_one():
+    reports = [sample(1), sample(2, minutes=30)]
+    table = {1: expected(1, hotel="برج السكينة"), 2: expected(2, hotel="-")}
+    results = {1: answer(hotel="دار المنارة"), 2: answer()}
+    text = render(run_of(results), reports, table)
+    assert "الفندق: الكل 1 من 2 (50%)" in text
+    assert "الفندق: المتوقع «برج السكينة»، الناتج «دار المنارة»" in text
+
+
+def test_the_hotel_is_right_when_it_is_the_same_hotel_in_another_spelling():
+    table = {1: expected(1, hotel="فندق برج السكينه")}
+    text = render(run_of({1: answer(hotel="برج السكينة")}), [sample(1)], table)
+    assert "الفندق: الكل 1 من 1 (100%)" in text
+
+
+def test_a_hotel_read_where_none_was_given_is_wrong():
+    text = render(run_of({1: answer(hotel="برج السكينة")}), [sample(1)], {1: expected(1, hotel="-")})
+    assert "الفندق: المتوقع «لا فندق»، الناتج «برج السكينة»" in text
+
+
+def test_hotel_name_and_question_are_not_scored_when_the_expected_answers_leave_them_out():
+    text = render(run_of({1: answer(hotel="برج السكينة", pilgrim_name="نبيل سعد")}), [sample(1)], {1: expected(1)})
+    assert "الفندق: الكل لا يوجد" in text
+    assert "اسم الحاج: الكل لا يوجد" in text
+    assert "البلاغات الخاطئة: 0" in text
+
+
+def test_the_pilgrims_name_is_scored_whatever_the_spelling_of_its_letters():
+    reports = [sample(1), sample(2, minutes=30)]
+    table = {1: expected(1, name="أحمد إدريس"), 2: expected(2, name="نبيل سعد")}
+    results = {1: answer(pilgrim_name="احمد ادريس"), 2: answer(pilgrim_name=None)}
+    text = render(run_of(results), reports, table)
+    assert "اسم الحاج: الكل 1 من 2 (50%)" in text
+    assert "اسم الحاج: المتوقع «نبيل سعد»، الناتج «لا اسم»" in text
+
+
+def test_a_wrong_name_in_a_holdout_report_is_reported_without_any_name():
+    wrong = {1: answer(pilgrim_name="زكريا الأول"), 2: answer(type="ac"), 3: answer(loc_number="355")}
+    holdout = a_holdout(wrong)
+    holdout.expected[1] = expected(1, name="زكريا الثاني")
+    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)}, holdout=holdout)
+    assert "اسم الحاج: لا يطابق المتوقع" in holdout_part(text)
+    assert "زكريا" not in text
+
+
+def test_the_question_to_the_sender_is_scored():
+    no_room = answer(loc_kind="none", loc_number=None, needs_confirmation=True, reasons=("no_location",))
+    reports = [sample(1), sample(2, minutes=30)]
+    table = {
+        1: expected(1, loc_kind="none", loc_number="-", needs_confirmation=True, ask="place"),
+        2: expected(2, ask="place"),
+    }
+    text = render(run_of({1: no_room, 2: answer()}), reports, table)
+    assert "السؤال للمرسل: الكل 1 من 2 (50%)" in text
+    assert "السؤال للمرسل: المتوقع «الغرفة أو الدور»، الناتج «لا سؤال»" in text
+
+
+def test_report_has_a_section_on_the_questions_to_senders():
+    no_room = answer(loc_kind="none", loc_number=None, needs_confirmation=True, reasons=("no_location",))
+    reports = [sample(1), sample(2, minutes=30), sample(3, minutes=60)]
+    table = {
+        1: expected(1, loc_kind="none", loc_number="-", needs_confirmation=True, ask="place"),
+        2: expected(2, ask="-"),
+        3: expected(3, ask="-"),
+    }
+    results = {1: no_room, 2: answer(), 3: no_room}
+    section = render(run_of(results), reports, table).split("== سؤال المرسل ==")[1].split("\n\n")[0]
+    assert "بلاغات يجب أن يُسأل مرسلها، وسُئل السؤال الصحيح: 1 من 1" in section
+    assert "بلاغات سُئل مرسلها بلا داعٍ: 1" in section
+
+
+# --- stage 2: messages that are not reports --------------------------------------------------
+
+
+def chat_answer() -> Understanding:
+    return answer(type="not_a_report", loc_kind="none", loc_number=None, owner="nobody", urgency="normal")
+
+
+def chat_expected(id) -> Expected:
+    return expected(id, type="not_a_report", loc_kind=None, loc_number=None, urgency=None, owner="nobody", incident=None)
+
+
+def not_reports_section(text: str) -> str:
+    return text.split("== الرسائل التي ليست بلاغات ==")[1].split("\n\n")[0]
+
+
+def test_report_counts_the_non_reports_that_were_recognised():
+    reports = [sample(1), sample(2, minutes=5), sample(3, minutes=9)]
+    table = {1: expected(1), 2: chat_expected(2), 3: chat_expected(3)}
+    results = {1: answer(), 2: chat_answer(), 3: answer(type="unclear", owner="supervisor", needs_confirmation=True, reasons=("unclear_type",))}
+    section = not_reports_section(render(run_of(results), reports, table))
+    assert "رسائل ليست بلاغات وعُرفت كذلك: 1 من 2" in section
+    assert "رسائل ليست بلاغات وعُدّت بلاغاً: 1" in section
+    assert "  - أرقامها: 3" in section
+    assert "بلاغات حقيقية أُسقطت على أنها ليست بلاغاً: 0" in section
+
+
+def test_a_real_report_dropped_as_a_non_report_is_counted_listed_and_a_confident_mistake():
+    reports = [sample(1), sample(2, minutes=30)]
+    table = {1: expected(1), 2: expected(2)}
+    text = render(run_of({1: answer(), 2: chat_answer()}), reports, table)
+    section = not_reports_section(text)
+    assert "بلاغات حقيقية أُسقطت على أنها ليست بلاغاً: 1" in section
+    assert "  - أرقامها: 2" in section
+    assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 1 من 2" in confident_section(text)
+
+
+def test_messages_that_are_not_reports_do_not_count_as_incidents():
+    reports = [sample(1), sample(2, minutes=5), sample(3, minutes=9)]
+    table = {1: expected(1, incident=1), 2: chat_expected(2), 3: expected(3, incident=1)}
+    section = grouping_section(render(run_of({1: answer(), 2: chat_answer(), 3: answer()}), reports, table))
+    assert "عدد الحوادث: المتوقع 1، الناتج 1" in section
+    assert "بلاغات في حادثتها الصحيحة: 2 من 2 (100%)" in section
+
+
+def test_a_real_report_dropped_as_a_non_report_is_missing_from_its_incident():
+    reports = [sample(1), sample(2, minutes=5)]
+    table = {1: expected(1, incident=1), 2: expected(2, incident=1)}
+    section = grouping_section(render(run_of({1: answer(), 2: chat_answer()}), reports, table))
+    assert "بلاغات في حادثتها الصحيحة: 0 من 2 (0%)" in section
+    assert "حوادث تفرّقت بلاغاتها (تكرار لم يُدمج): 1" in section
+
+
+# --- stage 2: numbers that must never be printed ----------------------------------------------
+
+
+def test_a_passport_or_visa_number_in_a_report_is_never_printed():
+    text_with_numbers = "نبيل سعد ضيّع بطاقة نسك، جواز X0012345 وتأشيرة 9990001234"
+    printed = render(run_of({1: answer(type="ac")}), [sample(1, text=text_with_numbers)], {1: expected(1)})
+    assert "البلاغ 1" in printed and "نبيل سعد" in printed
+    assert "X0012345" not in printed and "9990001234" not in printed
+    assert "[رقم جواز]" in printed and "[رقم تأشيرة]" in printed

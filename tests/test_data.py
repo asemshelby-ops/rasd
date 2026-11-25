@@ -11,9 +11,9 @@ REPORTS = load_reports()
 EXPECTED = load_expected()
 
 
-def test_there_are_36_arabic_and_6_urdu_reports():
+def test_there_are_50_arabic_and_8_urdu_messages():
     languages = Counter("ur" if r.lang == "ur" else "ar" for r in REPORTS)
-    assert languages == {"ar": 36, "ur": 6}
+    assert languages == {"ar": 50, "ur": 8}
 
 
 def test_arabic_reports_cover_saudi_and_palestinian_dialects():
@@ -49,7 +49,7 @@ def test_reports_marked_as_spoken_do_not_contain_the_room_digits():
 
 
 def test_several_incidents_have_duplicate_reports():
-    sizes = Counter(e.incident for e in EXPECTED.values())
+    sizes = Counter(e.incident for e in EXPECTED.values() if e.incident is not None)
     assert sum(1 for n in sizes.values() if n > 1) >= 3
 
 
@@ -341,3 +341,95 @@ def test_a_wrong_value_in_the_partial_column_names_the_file_the_report_and_the_c
         expected_with_partial(tmp_path, "1,ac,room,907,medium,maintenance,1,0,0,,half,")
     message = str(problem.value)
     assert "expected.csv" in message and "report 1" in message and "partial" in message
+
+
+# --- stage 2 columns: photo, hotel, name, ask --------------------------------------------
+
+STYLE_HEAD = "id,type,loc_kind,loc_number,urgency,owner,incident,needs_confirmation,room_in_words,hotel,name,ask,note\n"
+
+
+def real_style(tmp_path, report_row: str, expected_row: str, reports_head="id,sent_at,lang,text,photo\n"):
+    (tmp_path / "reports.csv").write_text(reports_head + report_row + "\n", encoding="utf-8-sig")
+    (tmp_path / "expected.csv").write_text(STYLE_HEAD + expected_row + "\n", encoding="utf-8-sig")
+    reports, expected = load_holdout(tmp_path)
+    return reports[0], expected[1]
+
+
+def test_the_photo_column_says_a_photo_came_with_the_message(tmp_path):
+    report, _ = real_style(tmp_path, f'1,2026-12-23 09:15,ar-sa,"{SECRET}",1', "1,nusuk_card,none,-,urgent,pilgrim_affairs,1,0,0,برج السكينة,نبيل سعد,-,")
+    assert report.photo is True
+
+
+def test_a_message_may_be_a_photo_with_no_words(tmp_path):
+    report, _ = real_style(tmp_path, "1,2026-12-23 09:15,ar-sa,,1", "1,unclear,none,-,,supervisor,1,1,0,-,-,type,")
+    assert (report.text, report.photo) == ("", True)
+
+
+def test_a_message_with_no_words_and_no_photo_is_still_an_error(tmp_path):
+    with pytest.raises(ValueError, match="text"):
+        real_style(tmp_path, "1,2026-12-23 09:15,ar-sa,,0", "1,unclear,none,-,,supervisor,1,1,0,-,-,type,")
+
+
+def test_a_file_without_a_photo_column_has_no_photos(tmp_path):
+    report, _ = real_style(
+        tmp_path, f'1,2026-12-23 09:15,ar-sa,"{SECRET}"', "1,water,room,907,urgent,maintenance,1,0,0,-,-,-,",
+        reports_head=REPORTS_HEAD,
+    )  # fmt: skip
+    assert report.photo is False
+
+
+def test_hotel_name_and_ask_are_read(tmp_path):
+    _, expected = real_style(tmp_path, f'1,2026-12-23 09:15,ar-sa,"{SECRET}",0', "1,nusuk_card,none,-,urgent,pilgrim_affairs,1,1,0,برج السكينة,-,name,")
+    assert (expected.hotel, expected.name, expected.ask) == ("برج السكينة", "-", "name")
+
+
+def test_empty_hotel_name_and_ask_cells_are_not_scored(tmp_path):
+    _, expected = real_style(tmp_path, f'1,2026-12-23 09:15,ar-sa,"{SECRET}",0', "1,water,room,907,urgent,maintenance,1,0,0,,,,")
+    assert (expected.hotel, expected.name, expected.ask) == (None, None, None)
+
+
+def test_a_file_without_those_columns_does_not_score_them(tmp_path):
+    folder = holdout_folder(tmp_path, f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n', "1,water,room,907,urgent,maintenance,1,0,0,\n")
+    expected = load_holdout(folder)[1][1]
+    assert (expected.hotel, expected.name, expected.ask) == (None, None, None)
+
+
+def test_a_wrong_value_in_the_ask_column_names_the_file_the_report_and_the_column(tmp_path):
+    with pytest.raises(ValueError) as problem:
+        real_style(tmp_path, f'1,2026-12-23 09:15,ar-sa,"{SECRET}",0', "1,water,none,-,urgent,maintenance,1,1,0,-,-,room,")
+    message = str(problem.value)
+    assert "expected.csv" in message and "report 1" in message and "ask" in message
+
+
+def test_a_message_that_is_not_a_report_is_accepted_with_its_owner_nobody(tmp_path):
+    _, expected = real_style(tmp_path, f'1,2026-12-23 09:15,ar-sa,"{SECRET}",0', "1,not_a_report,,,,nobody,,0,0,-,-,-,")
+    assert (expected.type, expected.owner, expected.incident) == ("not_a_report", "nobody", None)
+
+
+# --- the main data follows the team's rules, not hand-typed answers -----------------------
+
+
+def test_the_main_set_has_real_style_reports_and_messages_that_are_not_reports():
+    assert sum(1 for e in EXPECTED.values() if e.type == "not_a_report") >= 6
+    assert sum(1 for e in EXPECTED.values() if e.hotel not in (None, "-")) >= 8
+    assert sum(1 for e in EXPECTED.values() if e.name not in (None, "-")) >= 5
+    assert any(r.photo for r in REPORTS)
+    assert {e.ask for e in EXPECTED.values()} >= {"type", "place", "name", "-"}
+
+
+def test_expected_supervisor_flag_follows_what_each_type_needs():
+    from rasd.understand import requirement_reasons
+
+    for e in EXPECTED.values():
+        if e.loc_kind is None or e.needs_confirmation is None or e.hotel is None or e.name is None:
+            continue
+        number = None if e.loc_number == "-" else e.loc_number
+        hotel = None if e.hotel == "-" else e.hotel
+        name = None if e.name == "-" else e.name
+        needs = bool(requirement_reasons(e.type, hotel, e.loc_kind, number, name))
+        assert e.needs_confirmation == needs, f"report {e.id}"
+
+
+def test_every_new_type_and_every_non_report_has_the_owner_from_the_table():
+    for e in EXPECTED.values():
+        assert e.owner == OWNER_BY_TYPE[e.type], f"report {e.id}"

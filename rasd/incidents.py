@@ -7,6 +7,13 @@ The rule (no AI in here):
   - same type + same place + sent within MERGE_WINDOW_MINUTES of the incident's
     latest message  ->  the message joins that incident
   - anything else starts a new incident
+The place is the hotel together with the room, floor or elevator number.
+
+A message that is not a report (attendance, chat, a reply) makes no incident.
+
+Closing: an incident is closed only by close_incident(), which records when and
+by whom. No chat message closes anything, whatever it says ("found it", a
+thumbs-up): a message can only become a report, or nothing.
 
 A closed incident takes no more reports. A new report about the same problem in
 the same place opens a new incident, even inside the window: the problem came back.
@@ -39,6 +46,7 @@ _MOST_URGENT_FIRST = list(URGENCIES)
 @dataclass
 class Incident:
     type: str  # a code from schema.TYPES
+    hotel: str | None
     loc_kind: str  # a code from schema.LOCATION_KINDS
     loc_number: str | None
     urgency: str  # the most urgent of its messages
@@ -46,7 +54,8 @@ class Incident:
     first_at: datetime
     last_at: datetime
     stays_alone: bool = False  # True: its report could not be merged, so nothing may join it either
-    closed_at: datetime | None = None  # set when the incident is closed; then it takes no more reports
+    closed_at: datetime | None = None  # set by close_incident(); then the incident takes no more reports
+    closed_by: str | None = None  # who closed it
 
     @property
     def message_count(self) -> int:
@@ -63,7 +72,8 @@ def _may_take(incident: Incident, report: Understanding, sent_at: datetime, wind
     return (
         not incident.stays_alone
         and incident.closed_at is None
-        and (incident.type, incident.loc_kind, incident.loc_number) == (report.type, report.loc_kind, report.loc_number)
+        and (incident.type, incident.hotel, incident.loc_kind, incident.loc_number)
+        == (report.type, report.hotel, report.loc_kind, report.loc_number)
         and sent_at - incident.last_at <= window
     )
 
@@ -74,12 +84,15 @@ def add_report(
     sent_at: datetime,
     report: Understanding,
     window_minutes: int = MERGE_WINDOW_MINUTES,
-) -> Incident:
+) -> Incident | None:
     """Puts one report into the list of incidents and returns the incident it landed in.
 
     The report joins an incident that may take it, or starts a new incident,
-    which is added to the end of the list.
+    which is added to the end of the list. A message that is not a report makes
+    no incident: the list is left alone and None is returned.
     """
+    if not report.is_report:
+        return None
     window = timedelta(minutes=window_minutes)
     if can_merge(report):
         for incident in reversed(incidents):  # the latest incident first
@@ -90,6 +103,7 @@ def add_report(
                 return incident
     incident = Incident(
         type=report.type,
+        hotel=report.hotel,
         loc_kind=report.loc_kind,
         loc_number=report.loc_number,
         urgency=report.urgency,
@@ -108,3 +122,17 @@ def group_reports(arrivals, window_minutes: int = MERGE_WINDOW_MINUTES) -> list[
     for report_id, sent_at, report in sorted(arrivals, key=lambda arrival: arrival[1]):
         add_report(incidents, report_id, sent_at, report, window_minutes)
     return incidents
+
+
+def close_incident(incident: Incident, closed_by: str, at: datetime) -> Incident:
+    """Closes an incident: the only way an incident is ever closed.
+
+    closed_by says who closed it and at says when. Both are kept on the incident.
+    """
+    if not (closed_by or "").strip():
+        raise ValueError("An incident cannot be closed without saying who closes it.")
+    if incident.closed_at is not None:
+        raise ValueError(f"This incident was already closed by {incident.closed_by}.")
+    incident.closed_at = at
+    incident.closed_by = closed_by.strip()
+    return incident

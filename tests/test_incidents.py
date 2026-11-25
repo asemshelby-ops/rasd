@@ -6,7 +6,9 @@ The rooms and times here are made up for these tests.
 from datetime import datetime, timedelta
 
 from rasd.data import load_expected, load_reports
-from rasd.incidents import MERGE_WINDOW_MINUTES, add_report, group_reports
+import pytest
+
+from rasd.incidents import MERGE_WINDOW_MINUTES, add_report, close_incident, group_reports
 from rasd.routing import DEADLINE_MINUTES
 from rasd.understand import Understanding
 
@@ -299,15 +301,19 @@ def test_no_reports_means_no_incidents():
 
 def test_with_perfect_understanding_the_rule_reproduces_the_expected_incidents():
     """If every report were understood exactly as data/expected.csv says, merging
-    would give exactly the incident column of that table."""
+    would give exactly the incident column of that table. Messages that are not
+    reports have no incident."""
     expected = load_expected()
     perfect = []
     for r in load_reports():
         e = expected[r.id]
+        if e.type == "not_a_report":
+            continue
         number = e.loc_number if e.loc_number not in (None, "-") else None
         perfect.append(
             (r.id, r.sent_at, report(
                 type=e.type,
+                hotel=e.hotel if e.hotel not in (None, "-") else None,
                 loc_kind=e.loc_kind or "room",  # location not scored: a room whose number is unknown
                 loc_number=number,
                 urgency=e.urgency or "medium",
@@ -319,5 +325,76 @@ def test_with_perfect_understanding_the_rule_reproduces_the_expected_incidents()
 
     by_incident = {}
     for e in expected.values():
-        by_incident.setdefault(e.incident, []).append(e.id)
+        if e.type != "not_a_report":
+            by_incident.setdefault(e.incident, []).append(e.id)
     assert produced == sorted(sorted(ids) for ids in by_incident.values())
+
+
+# --- hotels ----------------------------------------------------------------------------
+
+
+def test_the_same_room_number_in_two_hotels_is_two_incidents():
+    assert grouped((0, report(hotel="برج السكينة")), (5, report(hotel="دار المنارة"))) == [[1], [2]]
+
+
+def test_the_same_room_in_the_same_hotel_is_one_incident_that_remembers_its_hotel():
+    incidents = group_reports(arrivals((0, report(hotel="برج السكينة")), (5, report(hotel="برج السكينة"))))
+    assert [i.report_ids for i in incidents] == [[1, 2]]
+    assert incidents[0].hotel == "برج السكينة"
+
+
+def test_two_reports_with_a_hotel_and_no_room_never_merge():
+    # Two lost cards in one hotel are two pilgrims.
+    card = report(type="nusuk_card", owner="pilgrim_affairs", hotel="برج السكينة", loc_kind="none", loc_number=None)
+    assert grouped((0, card), (3, card)) == [[1], [2]]
+
+
+# --- messages that are not reports --------------------------------------------------------
+
+CHAT = report(type="not_a_report", loc_kind="none", loc_number=None, owner="nobody", urgency="normal")
+
+
+def test_a_message_that_is_not_a_report_makes_no_incident():
+    incidents = []
+    assert add_report(incidents, 1, START, CHAT) is None
+    assert incidents == []
+    assert grouped((0, report()), (2, CHAT), (4, report())) == [[1, 3]]
+
+
+# --- closing ---------------------------------------------------------------------------------
+
+
+def test_closing_records_when_and_who():
+    incident = group_reports(arrivals((0, report())))[0]
+    closed = close_incident(incident, closed_by="مشرف الوردية", at=after(12))
+    assert closed is incident
+    assert incident.closed_at == after(12)
+    assert incident.closed_by == "مشرف الوردية"
+
+
+def test_an_incident_cannot_be_closed_without_saying_who_closes_it():
+    incident = group_reports(arrivals((0, report())))[0]
+    for nobody in ("", "   ", None):
+        with pytest.raises(ValueError, match="who"):
+            close_incident(incident, closed_by=nobody, at=after(12))
+    assert incident.closed_at is None
+
+
+def test_an_incident_cannot_be_closed_twice():
+    incident = group_reports(arrivals((0, report())))[0]
+    close_incident(incident, closed_by="مشرف الوردية", at=after(12))
+    with pytest.raises(ValueError, match="already"):
+        close_incident(incident, closed_by="موظف آخر", at=after(20))
+    assert incident.closed_by == "مشرف الوردية"
+
+
+def test_a_chat_reply_like_found_it_or_a_thumbs_up_never_closes_an_incident():
+    """Whatever a chat message says, it can only become a report or nothing.
+    Closing happens through close_incident alone."""
+    incidents = group_reports(arrivals((0, report(type="nusuk_card", owner="pilgrim_affairs"))))
+    # The reply read as "not a report":
+    add_report(incidents, 2, after(5), CHAT)
+    # The same reply misread as an unclear report, or as a report about the same room:
+    add_report(incidents, 3, after(6), report(type="unclear", owner="supervisor", needs_confirmation=True, reasons=("unclear_type",)))
+    add_report(incidents, 4, after(7), report(type="nusuk_card", owner="pilgrim_affairs"))
+    assert all(incident.closed_at is None and incident.closed_by is None for incident in incidents)

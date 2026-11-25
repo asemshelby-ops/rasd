@@ -82,7 +82,7 @@ def run_benchmark(
     on_progress=None,
     already_spent_usd: float = 0.0,
 ) -> Run:
-    """Runs understand_one(text) on every report, watching the cost after each call.
+    """Runs understand_one(report) on every report, watching the cost after each call.
 
     already_spent_usd is what this command spent before this set of reports, so
     that one limit covers the whole command.
@@ -97,7 +97,7 @@ def run_benchmark(
             break
         if on_progress:
             on_progress(position, len(reports))
-        answer = understand_one(report.text)
+        answer = understand_one(report)
         results[report.id] = answer
         input_tokens += answer.input_tokens
         output_tokens += answer.output_tokens
@@ -178,8 +178,10 @@ def _save(folder: Path, name: str, text: str) -> Path:
 
 
 def _reader(client, model: str):
-    """The function that reads one message with this model, at the stage the expected answers use."""
-    return lambda text: understand(text, client, model, stage=EXPECTED_STAGE)
+    """The function that reads one test message with this model, at the stage the expected answers use."""
+    return lambda report: understand(
+        report.text, client, model, stage=EXPECTED_STAGE, photo_attached=report.photo
+    )
 
 
 def _announce(model: str):
