@@ -96,12 +96,18 @@ class FirstThatWorks:
         self.transcribers = transcribers
 
     def transcribe(self, audio: bytes, filename: str) -> str:
-        problem = VoiceError("no transcriber is set up")
+        problem, heard_nothing = VoiceError("no transcriber is set up"), False
         for transcriber in self.transcribers:
             try:
-                return transcriber.transcribe(audio, filename)
+                text = transcriber.transcribe(audio, filename)
             except VoiceError as e:
                 problem = e
+                continue
+            if text.strip():
+                return text
+            heard_nothing = True  # it answered, with no words: let the next one try
+        if heard_nothing:
+            return ""
         raise problem
 
 

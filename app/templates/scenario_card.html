@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ copy.CARD_TITLE }}{% endblock %}
+{% block body_class %}card-page{% endblock %}
+{% block main %}
+<h1>{{ copy.CARD_TITLE }}: حاج تائه عند استقبال فندق ليس فندقه</h1>
+<p class="no-print"><button type="button" onclick="window.print()">{{ copy.PRINT }}</button></p>
+<p class="lead">المشغّل يشرح، والمحكّم يؤدي دور موظف الاستقبال، وعضو من الفريق يؤدي دور الحاج. اللوحة معروضة على الشاشة الكبيرة، وصفحة «إرسال بلاغ» مفتوحة على الجوال من فندق {{ scene.REPORTING_HOTEL }}.</p>
+
+<ol class="steps">
+  <li>
+    <h2>{{ copy.CARD_FOR_OPERATOR }}</h2>
+    <p class="say">«هذا مكتب استقبال في فندق {{ scene.REPORTING_HOTEL }}. وقف عنده حاج مسنّ لا يتكلم إلا الأردو، وليس من حجاج هذه الشركة. اليوم يُكتب مثل هذا البلاغ في مجموعة واتساب ويضيع بين الرسائل. سنرى ماذا يحدث له في رصد.»</p>
+  </li>
+  <li>
+    <h2>{{ copy.CARD_FOR_JUDGE }}</h2>
+    <p class="do">يضغط «{{ copy.RECORD }}»، يقرأ الجملة التالية، ثم يضغط «{{ copy.STOP_AND_SEND }}»:</p>
+    <p class="say">«{{ scene.COUNTER_NOTE }}»</p>
+  </li>
+  <li>
+    <h2>{{ copy.CARD_FOR_OPERATOR }}</h2>
+    <p class="say">«وصل البلاغ إلى اللوحة: حاج تائه، أولويته حرج، وجهته شؤون الحجاج. لم يكتب الموظف نوعاً ولا أولوية؛ تكلّم فقط.»</p>
+  </li>
+  <li>
+    <h2>ما يقوله عضو الفريق بدور الحاج</h2>
+    <p class="do">يسجّل بالأردو من الصفحة نفسها:</p>
+    <p class="say" dir="rtl" lang="ur">«{{ scene.PILGRIM_NOTE }}»</p>
+    <p class="note">معناها: «{{ scene.PILGRIM_NOTE_MEANING }}»</p>
+  </li>
+  <li>
+    <h2>{{ copy.CARD_FOR_OPERATOR }}</h2>
+    <p class="say">«رسالتان بلغتين عن الحاج نفسه من المكتب نفسه. رصد لم يفتح حالتين: اللوحة تقول «بلاغان، حالة واحدة».»</p>
+  </li>
+  <li>
+    <h2>{{ copy.CARD_FOR_JUDGE }}</h2>
+    <p class="do">يضغط «{{ copy.SHOW_CARD }}» ويصوّر البطاقة التجريبية المطبوعة.</p>
+    <h2>{{ copy.CARD_FOR_OPERATOR }}</h2>
+    <p class="say">«هذه بطاقة تجريبية مزيفة، ومكتوب عليها ذلك. يُقرأ الاسم ورقم التأشيرة من الصورة، ثم يُسأل بحث «علم» عن الحاج. البحث هنا {{ copy.SIMULATED }}، والشاشة تقول ذلك.»</p>
+  </li>
+  <li>
+    <h2>{{ copy.CARD_FOR_OPERATOR }}</h2>
+    <p class="say">«عرفنا شركته وفندقه وغرفته ومشرفه، ووصل إشعار إلى مشرف شركته. الإشعار {{ copy.SIMULATED }}. لاحظوا أن اللوحة لا تعرض اسمه الكامل ولا رقم تأشيرته ولا صورته.»</p>
+  </li>
+  <li>
+    <h2>ما يفعله عضو الفريق بدور المشرف</h2>
+    <p class="do">يكتب اسمه في خانة اللوحة مرة واحدة، ثم يضغط «{{ copy.CLOSE }}».</p>
+    <h2>{{ copy.CARD_FOR_OPERATOR }}</h2>
+    <p class="say">«أُغلقت الحالة بضغطة واحدة، وسُجّل الوقت ومن أغلق. رسالة «لقيناها» في واتساب لا تغلق شيئاً في رصد.»</p>
+  </li>
+</ol>
+
+<section class="fallback">
+  <h2>{{ copy.CARD_IF_LIVE_FAILS }}</h2>
+  <p class="do">افتح صفحة «{{ copy.OPERATOR_TITLE }}» من الجوال (العنوان ينتهي بـ <span dir="ltr">/operator</span>)، واضغط «{{ copy.SWITCH_TO_REPLAY }}»، ثم اضغط الخطوات الثلاث بالترتيب.</p>
+  <p class="say">«الشبكة في القاعة لا تساعدنا، فسنعرض المشهد نفسه من تسجيل محفوظ. اللوحة تكتب «{{ copy.FROM_SAVED }}» على الحالة.»</p>
+</section>
+
+<section class="honest">
+  <h2>ما هو حقيقي في العرض وما هو {{ copy.SIMULATED }}</h2>
+  <p>حقيقي: قراءة الرسالتين، ودمجهما، وقراءة البطاقة من الصورة، وتسجيل الإغلاق. {{ copy.SIMULATED }}: بحث «علم»، والإشعار، وبيانات شاشة المتابعة. البطاقة والحاج والفنادق والشركات كلها مخترعة. {{ copy.TRIAL_TIMES }}.</p>
+</section>
+{% endblock %}

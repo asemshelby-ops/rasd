@@ -13,7 +13,7 @@ from app.store import Store
 from rasd.cases import with_reporting_hotel
 from rasd.privacy import redact
 from rasd.routing import match_hotel
-from rasd.understand import Understanding, understand
+from rasd.understand import Understanding, not_understood, understand
 
 
 def take_in(
@@ -26,7 +26,10 @@ def take_in(
     """
     safe, private = redact(text)
     if safe.strip():
-        report = read(safe, photo_attached=photo)
+        try:
+            report = read(safe, photo_attached=photo)
+        except Exception as e:  # whatever broke, the message is kept and a person reads it
+            report = not_understood(f"the reader failed: {type(e).__name__}", photo_attached=photo)
     else:
         report = understand("", client=None, photo_attached=photo)  # a photo alone: no words to read
     report = replace(report, has_passport_number=bool(private.passport), has_visa_number=bool(private.visa))

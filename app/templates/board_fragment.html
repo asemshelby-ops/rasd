@@ -1,3 +1,4 @@
+{% if replay_mode %}<p class="banner replay-banner" role="note">{{ copy.REPLAY_MODE_ON }}</p>{% endif %}
 <div class="columns" data-now="{{ now }}">
 {% for state, title in copy.STATES.items() %}
   <section class="column column-{{ state }}" aria-labelledby="column-{{ state }}">
@@ -12,6 +13,7 @@
       <p class="case-place">{{ case.place }}</p>
       <p class="case-owner">إلى: {{ case.owner }}</p>
       {% if case.count > 1 %}<p class="case-count">{{ case.count_text }}</p>{% endif %}
+      {% if case.from_saved %}<p class="case-note"><span class="tag">{{ copy.FROM_SAVED }}</span></p>{% endif %}
       {% if case.photo_attached %}<p class="case-note">{{ copy.PHOTO_ATTACHED }}</p>{% endif %}
       {% if case.identified_text %}<p class="case-identified">{{ case.identified_text }}</p>{% endif %}
       {% if case.state == "closed" %}

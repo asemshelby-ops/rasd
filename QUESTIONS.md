@@ -168,3 +168,43 @@ what was chosen, why, and how to change it.
     check script, not in Rasd.
 45. **In the scene the place reads «برج السكينة، مرفق عام»**: the model takes
     "at the reception" as a common area. Left as it is.
+
+## Stage 4
+
+46. **The replay switch is the `/operator` page**, with two modes. In replay
+    the scene is answered wholly from saved files: the words of the two voice
+    notes, the model's reading of them as recorded from the real model on
+    25 November 2026 (`python -m demo.record_scene`), and the card reading. No
+    network. A case that came from saved files says «من تسجيل محفوظ» on the
+    board, and the board shows a banner while replay is on, because nothing
+    saved may pass for live.
+47. **The operator page and the reporting page work with no script**: plain
+    forms. This is the answer to "old phone browser".
+48. **Nothing protects `/operator` but the hotspot password.** Clearing the
+    board needs a tick box.
+49. **Voice-to-board time**: 2.39 to 3.16 seconds in three runs, measured on
+    the laptop itself. Live speech-to-text was NOT part of it (no key), nor the
+    upload from a phone. About five seconds of the 8-second target are left
+    for those two. The board now asks for news every second (it was two).
+50. **The pages give a reading 12 seconds and one retry** (the benchmark keeps
+    30 seconds and more retries): in front of an audience a stuck call is worse
+    than a failed one, and a failed reading goes to the supervisor.
+51. **Https on the hotspot** uses a certificate the laptop makes itself
+    (`python -m demo.run`). Phones show a warning once. It was checked here
+    with a browser on the same machine, not with a real phone on a hotspot.
+52. **A voice note in which live speech-to-text hears nothing falls back to
+    the saved words**, so the placeholder tones still play the scene after a
+    key is added.
+53. **Upload limits are my choice**: 4 MB for a photo (after the phone has made
+    it smaller), 15 MB for a voice note.
+54. **Roles on the scenario card**: the judge plays the counter employee and
+    reads the exact Arabic sentence; a teammate plays the pilgrim; a teammate
+    plays the supervisor. The owner may cast it differently.
+55. **Live-demo risks** are listed in `DEMO.md` with what is automated and what
+    must be tried by hand (`engineering:testing-strategy`). Not automatable
+    here: a real microphone in a noisy room, real phone browsers, the hotspot,
+    live speech-to-text.
+56. **An unexpected failure of the reader no longer shows an error page**: the
+    message is kept and goes to the supervisor. Found by writing the
+    bad-network test first.
+

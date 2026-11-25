@@ -38,7 +38,11 @@ create table if not exists events (id integer primary key, case_id integer, at t
 create table if not exists private_numbers (
     id integer primary key, report_id integer, case_id integer, kind text, value text);
 create table if not exists notifications (id integer primary key, case_id integer, at text, text text);
+create table if not exists settings (name text primary key, value text);
 """
+
+# How a report reached us. "saved" is a voice note the operator sent from the saved scene files.
+SAVED_SOURCE = "saved"
 
 
 class CaseClosed(Exception):
@@ -84,6 +88,33 @@ class Store:
         self.db.row_factory = sqlite3.Row
         self.db.executescript(TABLES)
         self.lock = threading.Lock()  # the pages are served from several threads
+
+    # --- settings and clearing ------------------------------------------------------------
+
+    def setting(self, name: str, default: str) -> str:
+        with self.lock:
+            row = self.db.execute("select value from settings where name = ?", (name,)).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, name: str, value: str) -> None:
+        with self.lock, self.db:
+            self.db.execute("insert or replace into settings (name, value) values (?, ?)", (name, value))
+
+    def clear(self) -> None:
+        """Empties the board between two demos. Settings (the live or replay mode) stay."""
+        with self.lock, self.db:
+            for table in ("reports", "cases", "events", "private_numbers", "notifications"):
+                self.db.execute(f"delete from {table}")
+
+    def open_lost_pilgrim_case(self) -> int | None:
+        """The latest lost-pilgrim case that is still open, for the operator's card step."""
+        with self.lock:
+            rows = self.db.execute("select id, incident from cases order by id desc").fetchall()
+        for row in rows:
+            incident = _incident_from_json(row["incident"])
+            if incident.type == "lost_pilgrim" and incident.closed_at is None:
+                return row["id"]
+        return None
 
     # --- reports coming in ---------------------------------------------------------------
 
@@ -247,7 +278,9 @@ class Store:
         """The cases as the big screen may show them: no full name, no number, no words of a message."""
         with self.lock:
             rows = self.db.execute("select * from cases order by id").fetchall()
-        cases = [self._public(row, now) for row in rows]
+            saved = self.db.execute("select distinct case_id from reports where source = ?", (SAVED_SOURCE,)).fetchall()
+        from_saved = {row["case_id"] for row in saved}
+        cases = [{**self._public(row, now), "from_saved": row["id"] in from_saved} for row in rows]
         order = list(URGENCIES)
         cases.sort(key=lambda case: (case["state"] == "closed", order.index(case["priority"]), case["first_at"]))
         return cases

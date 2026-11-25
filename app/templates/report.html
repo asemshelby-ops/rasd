@@ -4,21 +4,28 @@
 {% block main %}
 <p class="corner-label">{{ copy.PROTOTYPE_LABEL }}</p>
 <h1>{{ copy.REPORT_TITLE }}</h1>
-<label class="sending-from">{{ copy.SENDING_FROM }}
-  <select id="hotel">
-    {% for name in hotels %}<option value="{{ name }}" {% if name == hotel %}selected{% endif %}>{{ name }}</option>{% endfor %}
-  </select>
-</label>
-<ol id="chat" class="chat" aria-live="polite" aria-label="الرسائل"></ol>
+<ol id="chat" class="chat" aria-live="polite" aria-label="الرسائل">
+  {% if heard %}<li class="bubble mine" dir="auto">{{ copy.HEARD }}: {{ heard }}</li>{% endif %}
+  {% if reply %}<li class="bubble theirs" dir="auto">{{ reply }}{% if question %}<br><strong>{{ copy.QUESTION_FROM_RASD }}: {{ question }}</strong>{% endif %}</li>{% endif %}
+</ol>
 <p id="report-message" class="message" role="alert" hidden></p>
-<form id="composer" class="composer">
+{# A real form: with no script at all the browser posts it and the answer comes back in this page. #}
+<form id="composer" class="composer" method="post" action="/report" enctype="multipart/form-data">
+  <label class="sending-from">{{ copy.SENDING_FROM }}
+    <select id="hotel" name="hotel">
+      {% for name in hotels %}<option value="{{ name }}" {% if name == hotel %}selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+  </label>
   <label class="visually-hidden" for="text">{{ copy.WRITE_HERE }}</label>
-  <textarea id="text" rows="3" placeholder="{{ copy.WRITE_HERE }}" dir="auto"></textarea>
+  <textarea id="text" name="text" rows="3" placeholder="{{ copy.WRITE_HERE }}" dir="auto"></textarea>
   <div class="composer-actions">
     <button type="submit" class="primary">{{ copy.SEND }}</button>
     <button type="button" id="record">{{ copy.RECORD }}</button>
+    <label class="file-button">{{ copy.ATTACH_AUDIO }}
+      <input id="audio-file" name="audio" type="file" accept="audio/*">
+    </label>
     <label class="file-button">{{ copy.ATTACH_PHOTO }}
-      <input id="pilgrim-photo" type="file" accept="image/*" capture="environment">
+      <input id="pilgrim-photo" name="pilgrim_photo" type="file" accept="image/*" capture="environment">
     </label>
     <label class="file-button" id="card-button" hidden>{{ copy.SHOW_CARD }}
       <input id="card-photo" type="file" accept="image/*" capture="environment">

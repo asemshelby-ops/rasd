@@ -21,27 +21,18 @@ import struct
 import wave
 from pathlib import Path
 
-SCENE_DIR = Path(__file__).resolve().parent / "scene"
-
-# The counter this scene is sent from. The pilgrim's own hotel is a different one.
-REPORTING_HOTEL = "برج السكينة"
-
-COUNTER_FILE = "01_counter_arabic.wav"
-COUNTER_NOTE = (
-    "السلام عليكم، معكم الاستقبال. عندنا حاج كبير في السن واقف عند الاستقبال، تايه وما يعرف فندقه، "
-    "ما يتكلم عربي، يتكلم أردو بس، وما هو من حجاج شركتنا."
+from demo.scene import (  # noqa: F401  (the scene's own words and file names)
+    CARD_FILE,
+    CARD_MARKS,
+    CARD_NAME,
+    CARD_VISA,
+    COUNTER_FILE,
+    COUNTER_NOTE,
+    PILGRIM_FILE,
+    PILGRIM_NOTE,
+    REPORTING_HOTEL,
+    SCENE_DIR,
 )
-PILGRIM_FILE = "02_pilgrim_urdu.wav"
-PILGRIM_NOTE = (
-    "السلام علیکم، میرا نام زاہد کریم ہے۔ میں راستہ بھول گیا ہوں، مجھے اپنے ہوٹل کا نام یاد نہیں۔ "
-    "میں اکیلا ہوں، میری مدد کریں۔"
-)
-
-# What is printed on the mock card. The holder is one of the invented people in data/simulated_elm.json.
-CARD_FILE = "mock_card.png"
-CARD_NAME = "ZAHID KARIM"
-CARD_VISA = "9990007788"
-CARD_MARKS = ("SPECIMEN", "نموذج تجريبي")
 
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"  # on Windows: C:/Windows/Fonts/tahomabd.ttf
 

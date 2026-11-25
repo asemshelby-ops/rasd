@@ -117,7 +117,7 @@
     board.addEventListener("pointerdown", function () { pressing = true; });
     document.addEventListener("pointerup", function () { pressing = false; });
     document.addEventListener("pointercancel", function () { pressing = false; });
-    setInterval(refresh, 2000);
+    setInterval(refresh, (window.RASD && window.RASD.refreshMs) || 1000);
   }
   setOffset();
   tick();

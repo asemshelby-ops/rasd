@@ -137,6 +137,18 @@
     });
   });
 
+  // A sound file recorded with the phone's own recorder, for a phone whose browser will not record.
+  var audioFile = document.getElementById("audio-file");
+  audioFile.addEventListener("change", function () {
+    if (!audioFile.files[0]) { return; }
+    var body = new FormData();
+    body.append("hotel", hotel.value);
+    body.append("audio", audioFile.files[0]);
+    audioFile.value = "";
+    bubble("🎤 …", true);
+    post("/api/voice", body).then(show).catch(failed);
+  });
+
   // Voice: a phone browser only lets a page record on a secure connection. When it does not,
   // the button says so and the sender types instead.
   var recorder = null;

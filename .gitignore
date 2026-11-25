@@ -13,3 +13,6 @@ results/
 # Phase 2 runtime files
 *.db
 uploads/
+
+# The laptop's own https certificate for the hotspot demo (made by python -m demo.run)
+demo/cert/

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ copy.OPERATOR_TITLE }}{% endblock %}
+{% block body_class %}operator-page{% endblock %}
+{% block main %}
+<h1>{{ copy.OPERATOR_TITLE }}</h1>
+{% if message %}<p class="message" role="status">{{ message }}</p>{% endif %}
+
+<section class="panel mode-{{ mode }}" aria-labelledby="mode-title">
+  <h2 id="mode-title">{{ copy.MODE_REPLAY if mode == "replay" else copy.MODE_LIVE }}</h2>
+  <p>{{ copy.MODE_REPLAY_HELP if mode == "replay" else copy.MODE_LIVE_HELP }}</p>
+  <form method="post" action="/operator/mode">
+    <input type="hidden" name="mode" value="{{ "live" if mode == "replay" else "replay" }}">
+    <button type="submit" class="primary big">{{ copy.SWITCH_TO_LIVE if mode == "replay" else copy.SWITCH_TO_REPLAY }}</button>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="steps-title">
+  <h2 id="steps-title">{{ copy.SCENE_STEPS }}</h2>
+  <p>{{ copy.SCENE_STEPS_HELP }}</p>
+  <form method="post" action="/operator/scene/counter"><button type="submit" class="big">{{ copy.STEP_COUNTER }}</button></form>
+  <form method="post" action="/operator/scene/pilgrim"><button type="submit" class="big">{{ copy.STEP_PILGRIM }}</button></form>
+  <form method="post" action="/operator/scene/card"><button type="submit" class="big">{{ copy.STEP_CARD }}</button></form>
+</section>
+
+<section class="panel" aria-labelledby="time-title">
+  <h2 id="time-title">{{ copy.LAST_VOICE_TOOK }}</h2>
+  {% if last_voice %}
+  <p class="measured"><b>{{ last_voice.total }}</b> {{ copy.SECONDS }}</p>
+  <p class="note">{{ copy.LAST_VOICE_PARTS.format(heard=last_voice.heard, read=last_voice.read) }}</p>
+  {% else %}
+  <p class="empty">{{ copy.NO_VOICE_YET }}</p>
+  {% endif %}
+</section>
+
+<section class="panel" aria-labelledby="checks-title">
+  <h2 id="checks-title">{{ copy.CHECKS_TITLE }}</h2>
+  <ul class="checks">
+    {% for check in checks %}<li class="{{ "check-ok" if check.ok else "check-missing" }}">{{ "✓" if check.ok else "✗" }} {{ check.text }}</li>{% endfor %}
+  </ul>
+</section>
+
+<section class="panel" aria-labelledby="clear-title">
+  <h2 id="clear-title">{{ copy.CLEAR_DEMO }}</h2>
+  <p>{{ copy.CLEAR_HELP }}</p>
+  <form method="post" action="/operator/reset">
+    <label class="confirm"><input type="checkbox" name="confirm" value="yes"> {{ copy.CLEAR_YES }}</label>
+    <button type="submit">{{ copy.CLEAR_DEMO }}</button>
+  </form>
+</section>
+
+<p><a class="button" href="/board">{{ copy.BACK_TO_BOARD }}</a> <a class="button" href="/scenario-card">{{ copy.CARD_TITLE }}</a></p>
+{% endblock %}

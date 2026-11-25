@@ -1,0 +1,48 @@
+{
+  "note": "What the real model read in the demo scene. Written by `python -m demo.record_scene`; do not edit by hand.",
+  "recorded_on": "2026-11-25",
+  "model": "claude-haiku-5-5",
+  "readings": {
+    "السلام عليكم، معكم الاستقبال. عندنا حاج كبير في السن واقف عند الاستقبال، تايه وما يعرف فندقه، ما يتكلم عربي، يتكلم أردو بس، وما هو من حجاج شركتنا.": {
+      "type": "lost_pilgrim",
+      "hotel": "",
+      "location_kind": "common_area",
+      "number_words": "",
+      "location_number": "",
+      "pilgrim_name": "",
+      "risks": [
+        {
+          "kind": "elderly",
+          "words": "حاج كبير في السن"
+        },
+        {
+          "kind": "alone_or_lost",
+          "words": "تايه وما يعرف فندقه"
+        }
+      ],
+      "partial_words": "",
+      "confidence": "high"
+    },
+    "السلام علیکم، میرا نام زاہد کریم ہے۔ میں راستہ بھول گیا ہوں، مجھے اپنے ہوٹل کا نام یاد نہیں۔ میں اکیلا ہوں، میری مدد کریں۔": {
+      "type": "lost_pilgrim",
+      "hotel": "",
+      "location_kind": "none",
+      "number_words": "",
+      "location_number": "",
+      "pilgrim_name": "زاہد کریم",
+      "risks": [
+        {
+          "kind": "alone_or_lost",
+          "words": "میں راستہ بھول گیا ہوں۔ میں اکیلا ہوں"
+        }
+      ],
+      "partial_words": "",
+      "confidence": "high"
+    }
+  },
+  "card": {
+    "file": "mock_card.png",
+    "full_name": "ZAHID KARIM",
+    "visa_number": "9990007788"
+  }
+}

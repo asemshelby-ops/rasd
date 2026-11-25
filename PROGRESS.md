@@ -21,7 +21,10 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
 | Stage 3: before-and-after page read twice (9 calls each) | 0.0090 |
 | Stage 3: one call to find the cause of the dropped hotel | 0.0005 |
 | Stage 3: live check of the scene, twice (3 calls each) | 0.0028 |
-| **Total so far** | **0.1817** |
+| Stage 4: recording the scene's readings (3 calls) | 0.0016 |
+| Stage 4: voice-to-board measurement, three runs (6 calls) | 0.0038 |
+| Stage 4: one browser check that ran live by mistake (4 calls) | 0.0019 |
+| **Total so far** | **0.1890** |
 
 ## Stages
 
@@ -30,8 +33,8 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
 | 1 | Priority and number fixes; measure | DONE |
 | 2 | Real field style (items 1 to 11); measure | DONE |
 | 3 | The demo scene: reporting page, board, lost-card flow, Elm view, before-and-after page | DONE |
-| 4 | Demo safety: voice-to-board time, replay switch, Windows steps, scenario card, risk tests | NEXT |
-| 5 | Local WhatsApp counting tool | not started |
+| 4 | Demo safety: voice-to-board time, replay switch, Windows steps, scenario card, risk tests | DONE |
+| 5 | Local WhatsApp counting tool | NEXT |
 | 6 | Code review, final benchmark, MORNING_REPORT.md | not started |
 
 ## Stage notes
@@ -103,3 +106,22 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
   simulated lookup, notification, close logged). No benchmark run in this
   stage (it is not a "measure" stage).
 - Next: stage 4.
+
+### Stage 4: DONE
+
+- Voice-to-board time (`python -m demo.measure_time`, saved in
+  `measurements/stage4_voice_to_board.txt`), three runs with the real small
+  model: 2.99, 2.39 and 3.16 seconds; target under 8. Live speech-to-text was
+  not part of it (no key); the report says so.
+- Replay switch: `/operator`, plain forms, works from a phone. Replay mode
+  answers the scene from saved files with no network; saved cases are labelled
+  on the board.
+- Hotspot: `python -m demo.run` serves https with a certificate made on the
+  laptop and prints the addresses. Windows steps in Arabic in `DEMO.md`.
+- Scenario card: `/scenario-card`, one printed A4 sheet, exact sentences.
+- Risks (`engineering:testing-strategy`): listed in `DEMO.md`; automated in
+  `tests/test_demo_safety.py` and `tests/test_demo_tools.py` (same-second
+  reports, twelve phones at once, restart, failed reading, failed card reader,
+  noise, double tap, upload limits, no-script form).
+- Tests: 705 passed.
+- Next: stage 5.

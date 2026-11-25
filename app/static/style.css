@@ -106,3 +106,43 @@ table.elm th { background: var(--ink); color: #fff; }
   .corner-label { position: static; display: block; margin-bottom: .4rem; max-width: none; }
 }
 @media (prefers-reduced-motion: no-preference) { .case { transition: border-color .2s; } }
+
+/* --- the operator page: large buttons for a phone held in one hand --- */
+.operator-page main { max-width: 40rem; margin: 0 auto; }
+.panel { background: var(--card); border: 2px solid var(--line); border-radius: 12px; padding: .8rem 1rem; margin: 1rem 0; }
+.panel form { margin: .5rem 0; }
+.panel.mode-replay { border-color: var(--urgent); border-width: 4px; background: var(--warn-bg); }
+button.big { width: 100%; min-height: 64px; font-size: 1.15rem; justify-content: center; }
+.measured { font-size: 2rem; margin: 0; }
+.checks { list-style: none; padding: 0; margin: 0; }
+.checks li { padding: .3rem 0; font-weight: 700; }
+.check-ok { color: var(--ok); }
+.check-missing { color: var(--critical); }
+.confirm { display: block; margin: .5rem 0; font-weight: 700; }
+.confirm input { width: 1.4rem; height: 1.4rem; vertical-align: middle; }
+.replay-banner { position: static; margin-bottom: .6rem; }
+
+/* --- the scenario card: printed and held in the hand --- */
+.card-page main { max-width: 46rem; margin: 0 auto; }
+.steps { padding-inline-start: 1.6rem; }
+.steps li { margin-bottom: .9rem; break-inside: avoid; }
+.steps h2, .fallback h2, .honest h2 { font-size: 1rem; margin: .4rem 0 .1rem; color: var(--muted); }
+.say { font-size: 1.15rem; font-weight: 700; margin: .2rem 0; border-inline-start: 6px solid var(--ink); padding-inline-start: .7rem; }
+.do { margin: .2rem 0; }
+.fallback, .honest { border: 2px solid var(--ink); border-radius: 10px; padding: .5rem .9rem; margin: 1rem 0; break-inside: avoid; }
+.fallback { background: var(--warn-bg); }
+@media print {
+  /* One A4 sheet: the card is held in one hand. */
+  @page { size: A4; margin: 11mm; }
+  .top, .skip, .no-print { display: none; }
+  body { background: #fff; line-height: 1.4; }
+  html { font-size: 9.5pt; }
+  main { padding: 0; }
+  h1 { font-size: 1.4rem; margin: 0 0 .2rem; }
+  .lead { font-size: 1rem; margin: .2rem 0; }
+  .steps li { margin-bottom: .35rem; }
+  .steps h2, .fallback h2, .honest h2 { margin: .15rem 0 0; }
+  .say { font-size: 1.05rem; margin: .1rem 0; }
+  .do, .note { margin: .1rem 0; }
+  .fallback, .honest { background: #fff; padding: .3rem .7rem; margin: .4rem 0; }
+}

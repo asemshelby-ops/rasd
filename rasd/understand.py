@@ -426,6 +426,11 @@ def _needs_a_person(reason: str, error: str | None = None, **extras) -> Understa
     )
 
 
+def not_understood(error: str, photo_attached: bool = False) -> Understanding:
+    """The report for a message nobody could read (no network, no key): it goes to the supervisor."""
+    return _needs_a_person("not_understood", error, photo_attached=photo_attached)
+
+
 # ---------------------------------------------------------------------------
 # Calling the model
 # ---------------------------------------------------------------------------
@@ -444,6 +449,21 @@ def make_client(env_file: Path = PROJECT_DIR / ".env") -> anthropic.Anthropic:
         )
     # A stuck call must not freeze the reception desk: give up after 30 seconds.
     return anthropic.Anthropic(api_key=key, timeout=30.0, max_retries=2)
+
+
+def ask_model(safe_message: str, client: anthropic.Anthropic, model: str = DEFAULT_MODEL):
+    """The one call to Claude: the message goes in, the model's Reading comes back in the reply.
+
+    Raises what the SDK raises. safe_message must already have its passport and visa numbers taken out.
+    """
+    return client.messages.parse(
+        model=model,
+        max_tokens=MAX_TOKENS,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": safe_message}],
+        output_format=Reading,
+        output_config={"effort": EFFORT},
+    )
 
 
 def understand(
@@ -478,14 +498,7 @@ def understand(
         )
 
     try:
-        reply = client.messages.parse(
-            model=model,
-            max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": safe_message}],
-            output_format=Reading,
-            output_config={"effort": EFFORT},
-        )
+        reply = ask_model(safe_message, client, model)
     except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
         return failed(f"the Claude key was rejected, check {KEY_VARIABLE} ({e.status_code})")
     except anthropic.NotFoundError:
