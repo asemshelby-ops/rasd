@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block html_class %} class="board-root"{% endblock %}
+{% block title %}{{ copy.BOARD_TITLE }}{% endblock %}
+{% block body_class %}board-page{% endblock %}
+{% block main %}
+<div class="board-top">
+  <h1>{{ copy.BOARD_TITLE }}</h1>
+  <p class="tag">{{ copy.TRIAL_TIMES }}</p>
+  <div class="board-tools">
+    <button type="button" id="smaller">{{ copy.SMALLER }}</button>
+    <button type="button" id="larger">{{ copy.LARGER }}</button>
+    <label class="who" for="who">{{ copy.YOUR_NAME }}</label>
+    <input id="who" type="text" autocomplete="name" aria-describedby="board-message">
+  </div>
+</div>
+<p id="board-message" class="message" role="alert" hidden></p>
+<p id="board-announcer" class="visually-hidden" role="status" aria-live="polite"></p>
+<div id="board">
+{% include "board_fragment.html" %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>window.RASD = {{ {
+  "nameNeeded": copy.NAME_NEEDED, "connectionLost": copy.CONNECTION_LOST, "newCase": copy.NEW_CASE, "movedTo": copy.MOVED_TO
+} | tojson }};</script>
+<script src="/static/board.js"></script>
+{% endblock %}

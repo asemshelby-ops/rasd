@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>رصد</h1>
+<p class="lead">بلاغ الحاج من رسالة الموظف إلى حالة لها صاحب وموعد.</p>
+<section aria-labelledby="send-title">
+  <h2 id="send-title">إرسال بلاغ من مكتب استقبال</h2>
+  <ul class="links">
+    {% for hotel in hotels %}
+    <li><a class="button" href="/report?hotel={{ hotel | urlencode }}">فندق {{ hotel }}</a></li>
+    {% endfor %}
+  </ul>
+  <p class="note">أسماء الفنادق تجريبية مخترعة.</p>
+</section>
+<section aria-labelledby="see-title">
+  <h2 id="see-title">الشاشات</h2>
+  <ul class="links">
+    <li><a class="button" href="/board">لوحة الحالات</a></li>
+    <li><a class="button" href="/elm">متابعة بدل الفاقد ({{ copy.SIMULATED }})</a></li>
+    <li><a class="button" href="/elm/mockup">التجمعات وبطاقة الأداء ({{ copy.MOCKUP_LABEL }})</a></li>
+    <li><a class="button" href="/before-after">قبل وبعد</a></li>
+  </ul>
+</section>
+{% endblock %}

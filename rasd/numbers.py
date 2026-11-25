@@ -72,6 +72,46 @@ def contains_words_in_order(message: str, quote: str) -> bool:
     return False
 
 
+# Short words Arabic writes glued to the front of the next word: "بدار المنارة" is
+# "in Dar al-Manara". و and ف (and, so) may come before ب ل ك (in, to, like).
+_GLUED = ("وب", "ول", "وك", "فب", "فل", "فك", "و", "ف", "ب", "ل", "ك")
+
+
+def unglued(word: str) -> list[str]:
+    """A word as written, and what it would be without a short word glued to its front.
+
+    "بدار" gives "بدار" and "دار". "للمنارة" also gives "المنارة": after a glued
+    ل the article is written without its alef.
+    """
+    forms = [word]
+    for short in _GLUED:
+        rest = word[len(short) :]
+        if word.startswith(short) and rest:
+            forms.append(rest)
+            if short.endswith("ل") and rest.startswith("ل"):
+                forms.append("ا" + rest)
+    return forms
+
+
+def contains_name(message: str, name: str) -> bool:
+    """True if every word of a name (a hotel, a person) is in the message, in the same order.
+
+    The model returns a name bare, but a message often glues a short word to its
+    front ("بدار المنارة", "ليوسف"), so a word of the message also counts without
+    that short word.
+    """
+    wanted = normalise(name).split()
+    if not wanted:
+        return False
+    position = 0
+    for word in normalise(message).split():
+        if wanted[position] in unglued(word):
+            position += 1
+            if position == len(wanted):
+                return True
+    return False
+
+
 def contains_number(message: str, number: str) -> bool:
     """True if the message has exactly this number written in digits.
 

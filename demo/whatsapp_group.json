@@ -1,0 +1,14 @@
+{
+  "note": "An INVENTED WhatsApp group for the before-and-after page. No real person, hotel or message. Change it, then run: python -m app.before_after",
+  "messages": [
+    {"sender": "أبو فهد (مشرف المناوبة)", "time": "7:58", "text": "صباح الخير يا شباب، الحضور: مناوبة الصباح كاملة ✅", "photo": null},
+    {"sender": "ماجد", "time": "8:01", "text": "حاضر 🙋", "photo": null},
+    {"sender": "استقبال دار المنارة", "time": "8:03", "text": "الحاجة اللي في غرفة 412 بدار المنارة تقول ما وصلتها هدية الضيافة لين الحين", "photo": null},
+    {"sender": "ماجد", "time": "8:04", "text": "ترى باص الزيارة يتحرك 9 ونص لا أحد يتأخر", "photo": null},
+    {"sender": "صيانة", "time": "8:06", "text": "شوفوا الماسورة تسرّب موية قوي", "photo": "ماسورة تسرّب"},
+    {"sender": "استقبال برج السكينة", "time": "8:09", "text": "حاج في برج السكينة غرفة 620 ضيّع بطاقة نسك، اسمه نبيل سعد", "photo": null},
+    {"sender": "أبو فهد (مشرف المناوبة)", "time": "8:12", "text": "أحد عنده شاحن آيفون؟", "photo": null},
+    {"sender": "استقبال نزل الياسمين", "time": "8:20", "text": "عندنا في نزل الياسمين حاجة كبيرة في السن تايهة ما تعرف غرفتها ولا تتكلم عربي", "photo": null},
+    {"sender": "ماجد", "time": "8:31", "text": "لقيناها 👍", "photo": null}
+  ]
+}

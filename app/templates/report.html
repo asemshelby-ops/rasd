@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ copy.REPORT_TITLE }}{% endblock %}
+{% block body_class %}report-page{% endblock %}
+{% block main %}
+<p class="corner-label">{{ copy.PROTOTYPE_LABEL }}</p>
+<h1>{{ copy.REPORT_TITLE }}</h1>
+<label class="sending-from">{{ copy.SENDING_FROM }}
+  <select id="hotel">
+    {% for name in hotels %}<option value="{{ name }}" {% if name == hotel %}selected{% endif %}>{{ name }}</option>{% endfor %}
+  </select>
+</label>
+<ol id="chat" class="chat" aria-live="polite" aria-label="الرسائل"></ol>
+<p id="report-message" class="message" role="alert" hidden></p>
+<form id="composer" class="composer">
+  <label class="visually-hidden" for="text">{{ copy.WRITE_HERE }}</label>
+  <textarea id="text" rows="3" placeholder="{{ copy.WRITE_HERE }}" dir="auto"></textarea>
+  <div class="composer-actions">
+    <button type="submit" class="primary">{{ copy.SEND }}</button>
+    <button type="button" id="record">{{ copy.RECORD }}</button>
+    <label class="file-button">{{ copy.ATTACH_PHOTO }}
+      <input id="pilgrim-photo" type="file" accept="image/*" capture="environment">
+    </label>
+    <label class="file-button" id="card-button" hidden>{{ copy.SHOW_CARD }}
+      <input id="card-photo" type="file" accept="image/*" capture="environment">
+    </label>
+  </div>
+  <p class="note">{{ copy.PHOTO_NOTE }}</p>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>window.RASD = {{ {
+  "sending": copy.SENDING, "sendFailed": copy.SEND_FAILED, "resend": copy.RESEND, "micBlocked": copy.MIC_BLOCKED,
+  "record": copy.RECORD, "stopAndSend": copy.STOP_AND_SEND, "heard": copy.HEARD, "empty": copy.EMPTY_MESSAGE,
+  "photoAttached": copy.ATTACH_PHOTO, "showCard": copy.SHOW_CARD, "mockCard": copy.MOCK_CARD_NOTE
+} | tojson }};</script>
+<script src="/static/report.js"></script>
+{% endblock %}

@@ -1,0 +1,108 @@
+/* Rasd pages. Arabic, right to left. The board is read from the back of a hall:
+   large type, strong contrast, and priority is always written in words, never colour alone. */
+:root {
+  --ink: #14181f; --paper: #f6f4ef; --card: #ffffff; --line: #5b6470; --muted: #3d4651;
+  --critical: #8b0f0f; --urgent: #8a3b00; --medium: #174a86; --normal: #33383f; --focus: #0b57d0;
+  --ok: #155d2b; --warn-bg: #fff1c2;
+}
+* { box-sizing: border-box; }
+html { font-size: 18px; }
+body { margin: 0; background: var(--paper); color: var(--ink); line-height: 1.6;
+  font-family: "Noto Kufi Arabic", "Segoe UI", Tahoma, "Geeza Pro", Arial, sans-serif; }
+a { color: var(--focus); }
+:focus-visible { outline: 4px solid var(--focus); outline-offset: 3px; }
+.skip { position: absolute; inset-inline-start: -999rem; }
+.skip:focus { inset-inline-start: 1rem; top: 1rem; background: var(--card); padding: .5rem 1rem; z-index: 10; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.top { display: flex; gap: 1.5rem; align-items: center; padding: .6rem 1.2rem; background: var(--ink); color: #fff; flex-wrap: wrap; }
+.top a { color: #fff; margin-inline-end: .4rem; padding: .55rem .5rem; display: inline-block; }
+.top a:focus-visible { outline-color: #ffd28a; } /* the blue ring does not show on the dark bar */
+.brand { font-size: 1.4rem; }
+main { padding: 1rem 1.2rem 3rem; }
+h1 { font-size: 1.8rem; margin: .4rem 0; }
+h2 { font-size: 1.3rem; margin: .8rem 0 .5rem; }
+h3 { font-size: 1.15rem; margin: 0; }
+.lead { font-size: 1.15rem; }
+.note, .case-note { color: var(--muted); font-size: .95rem; margin: .2rem 0; }
+.links { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .8rem; }
+button, .button, .file-button { font: inherit; font-weight: 700; min-height: 48px; padding: .5rem 1.1rem; border-radius: 10px;
+  border: 2px solid var(--ink); background: var(--card); color: var(--ink); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+button.primary, button.close { background: var(--ink); color: #fff; }
+button:disabled { opacity: .6; cursor: progress; }
+.file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.file-button:focus-within { outline: 4px solid var(--focus); outline-offset: 3px; }
+.tag, .banner, .corner-label { font-weight: 700; background: var(--warn-bg); color: var(--ink); border: 2px solid var(--ink); border-radius: 8px; padding: .15rem .6rem; display: inline-block; }
+.banner { display: block; text-align: center; font-size: 1.2rem; padding: .6rem; position: sticky; top: 0; z-index: 5; }
+.corner-label { position: fixed; top: 3.4rem; inset-inline-end: .6rem; font-size: .8rem; z-index: 6; max-width: 60vw; }
+.message { background: var(--warn-bg); border: 2px solid var(--ink); border-radius: 10px; padding: .6rem .9rem; font-weight: 700; }
+.empty { color: var(--muted); }
+
+/* --- the board --- */
+/* All sizes on the board are in rem, so one number scales the whole board with the screen.
+   The operator can scale it further for the hall with the two size buttons (--board-scale). */
+html.board-root { font-size: calc(clamp(18px, 1.3vw, 40px) * var(--board-scale, 1)); }
+.board-top { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+.board-tools { margin-inline-start: auto; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-size: .8rem; }
+.board-tools button { font-size: .8rem; min-height: 44px; }
+.who { font-weight: 700; }
+input[type=text], select, textarea { font: inherit; padding: .4rem .6rem; min-height: 44px; border: 2px solid var(--ink); border-radius: 8px; background: #fff; color: var(--ink); }
+.board-tools input { width: 11rem; }
+.columns { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; align-items: start; }
+.column { background: #e9e5db; border-radius: 12px; padding: .6rem; min-height: 8rem; }
+.column h2 { display: flex; justify-content: space-between; margin: 0 0 .5rem; }
+.count { background: var(--ink); color: #fff; border-radius: 999px; padding: 0 .7rem; }
+.case { background: var(--card); border: 2px solid var(--line); border-inline-start: 14px solid var(--normal); border-radius: 12px; padding: .6rem .8rem; margin-bottom: .7rem; }
+.case.priority-critical { border-inline-start-color: var(--critical); border-inline-start-style: double; border-inline-start-width: 18px; }
+.case.priority-urgent { border-inline-start-color: var(--urgent); }
+.case.priority-medium { border-inline-start-color: var(--medium); border-inline-start-style: dashed; }
+.case.priority-normal { border-inline-start-color: var(--normal); border-inline-start-style: dotted; }
+.case-head { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.chip { color: #fff; font-weight: 700; font-size: 1.25rem; border-radius: 8px; padding: .05rem .7rem; }
+.chip-critical { background: var(--critical); } .chip-critical::before { content: "‼ "; }
+.chip-urgent { background: var(--urgent); } .chip-urgent::before { content: "! "; }
+.chip-medium { background: var(--medium); }
+.chip-normal { background: var(--normal); }
+.case-type { font-size: 1.45rem; font-weight: 700; margin: .3rem 0 0; line-height: 1.35; }
+.case-place, .case-owner, .case-count, .case-identified, .case-closed { margin: .15rem 0; }
+.case-place { font-size: 1.2rem; }
+.case-owner, .case-identified, .case-closed { font-size: .95rem; }
+.case-count { font-weight: 700; font-size: 1.25rem; color: var(--ok); }
+.case-identified { border-top: 2px dashed var(--line); padding-top: .3rem; }
+.clock { margin: .2rem 0; display: flex; justify-content: space-between; gap: .5rem; }
+.countdown { font-variant-numeric: tabular-nums; font-size: 1.5rem; direction: ltr; unicode-bidi: isolate; }
+.countdown.late { color: var(--critical); }
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+.notifications { margin-top: 1rem; background: var(--card); border: 2px solid var(--line); border-radius: 12px; padding: .6rem .9rem; }
+.notification { font-size: 1.1rem; margin: .3rem 0; }
+
+/* --- the reporting page: a chat --- */
+.report-page main { max-width: 42rem; margin: 0 auto; }
+.sending-from { display: block; margin: .4rem 0; font-weight: 700; }
+.chat { list-style: none; padding: 0; margin: .8rem 0; display: flex; flex-direction: column; gap: .5rem; min-height: 8rem; }
+.bubble { max-width: 88%; padding: .5rem .8rem; border-radius: 14px; border: 2px solid var(--line); background: var(--card); overflow-wrap: anywhere; }
+#chat .bubble { white-space: pre-wrap; }
+.bubble .words { display: block; white-space: pre-wrap; }
+.bubble.mine { align-self: flex-start; background: #dff3d8; }
+.bubble.theirs { align-self: flex-end; }
+.bubble .sender { display: block; font-weight: 700; font-size: .9rem; }
+.bubble time { display: block; font-size: .8rem; color: var(--muted); }
+.bubble .options { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+.composer textarea { width: 100%; }
+.composer-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+.photo-box { display: block; background: #d7dbe0; border: 2px dashed var(--line); border-radius: 8px; padding: 1.2rem .6rem; text-align: center; margin: .3rem 0; }
+
+/* --- the Elm view and the before-and-after page --- */
+table.elm { border-collapse: collapse; width: 100%; background: var(--card); font-size: 1.1rem; }
+table.elm caption { text-align: start; padding: .4rem 0; color: var(--muted); }
+table.elm th, table.elm td { border: 2px solid var(--line); padding: .5rem .8rem; text-align: start; }
+table.elm th { background: var(--ink); color: #fff; }
+.mockup-grid, .before-after { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; align-items: start; }
+.mockup-page main { background: repeating-linear-gradient(135deg, transparent 0 60px, rgba(0,0,0,.03) 60px 120px); }
+.before, .after { background: #e9e5db; border-radius: 12px; padding: .8rem; }
+.group-chat .bubble { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .columns, .mockup-grid, .before-after { grid-template-columns: 1fr; }
+  .corner-label { position: static; display: block; margin-bottom: .4rem; max-width: none; }
+}
+@media (prefers-reduced-motion: no-preference) { .case { transition: border-color .2s; } }

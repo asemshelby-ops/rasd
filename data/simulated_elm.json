@@ -1,0 +1,8 @@
+{
+  "note": "SIMULATED DATA. Every pilgrim, company, hotel, supervisor and number in this file is invented for the demo. It stands in for an Elm lookup that does not exist yet.",
+  "pilgrims": [
+    {"name": "MUHAMMAD ASHRAF", "visa_number": "9990004321", "company": "ضيوف الوادي", "hotel": "دار المنارة", "room": "731", "supervisor": "سالم"},
+    {"name": "ZAHID KARIM", "visa_number": "9990007788", "company": "قوافل النور", "hotel": "واحة الروضة", "room": "246", "supervisor": "هشام"},
+    {"name": "BILQIS NOOR", "visa_number": "9990001166", "company": "ضيوف الوادي", "hotel": "نزل الياسمين", "room": "519", "supervisor": "سالم"}
+  ]
+}

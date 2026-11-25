@@ -18,7 +18,10 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
 | Stage 1: two checks of report 22 (6 and 8 single calls) | 0.0081 |
 | Stage 2: three benchmark runs | 0.0887 |
 | Stage 2: check of seven reports (28 single calls) | 0.0151 |
-| **Total so far** | **0.1694** |
+| Stage 3: before-and-after page read twice (9 calls each) | 0.0090 |
+| Stage 3: one call to find the cause of the dropped hotel | 0.0005 |
+| Stage 3: live check of the scene, twice (3 calls each) | 0.0028 |
+| **Total so far** | **0.1817** |
 
 ## Stages
 
@@ -26,8 +29,8 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
 |---|---|---|
 | 1 | Priority and number fixes; measure | DONE |
 | 2 | Real field style (items 1 to 11); measure | DONE |
-| 3 | The demo scene: reporting page, board, lost-card flow, Elm view, before-and-after page | NEXT |
-| 4 | Demo safety: voice-to-board time, replay switch, Windows steps, scenario card, risk tests | not started |
+| 3 | The demo scene: reporting page, board, lost-card flow, Elm view, before-and-after page | DONE |
+| 4 | Demo safety: voice-to-board time, replay switch, Windows steps, scenario card, risk tests | NEXT |
 | 5 | Local WhatsApp counting tool | not started |
 | 6 | Code review, final benchmark, MORNING_REPORT.md | not started |
 
@@ -75,3 +78,28 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
 - After the measure: hotel recognised by the distinctive part of its name;
   confidence rule clarified. Checked with 28 single calls, no fourth run.
 - Next: stage 3.
+
+### Stage 3: DONE
+
+- Pages (`app/`): chat-style reporting page with the prototype label; board
+  with four states, critical first, countdowns, acknowledge / confirm / close
+  with a name and a time; lost-card flow with a pre-filled replacement request
+  and a 24-hour clock; Elm view with a fixed simulated-data banner; one static
+  mockup screen; before-and-after page.
+- Scene rules (`rasd/`): lost-pilgrim merge (same hotel, 15 minutes),
+  reporting hotel, replacement request, simulated Elm lookup, voice behind one
+  interface, mock card reader that refuses unmarked cards.
+- Scene files (`demo/scene/`): mock card, two PLACEHOLDER voice notes (tones)
+  with their words. No speech-to-text key, no real recordings.
+- Found and fixed: a hotel glued to a short word («بدار المنارة») was dropped
+  silently (QUESTIONS.md 38).
+- Skills: `design:ux-copy` for the wording (`app/copy.py`),
+  `design:accessibility-review` on the board (QUESTIONS.md 41),
+  `superpowers:systematic-debugging` for the dropped hotel. `frontend-design`
+  is not available in this session; the owner said to continue without it.
+- Tests: 658 passed.
+- Live check with the real small model: the whole scene passed (two voice
+  notes merged into one critical case "بلاغان، حالة واحدة", card read,
+  simulated lookup, notification, close logged). No benchmark run in this
+  stage (it is not a "measure" stage).
+- Next: stage 4.

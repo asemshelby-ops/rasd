@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ copy.ELM_TITLE }}{% endblock %}
+{% block body_class %}elm-page{% endblock %}
+{% block main %}
+<p class="banner" role="note">{{ copy.SIMULATED_DATA_BANNER }}</p>
+<h1>{{ copy.ELM_TITLE }}</h1>
+<table class="elm" data-now="{{ now }}">
+  <caption>طلبات بدل فاقد بطاقات نسك لدى شركات الخدمة، مرتبة بالأقرب انتهاءً</caption>
+  <thead><tr><th scope="col">الشركة</th><th scope="col">الطلب</th><th scope="col">{{ copy.REPLACEMENT_WITHIN }}</th><th scope="col">المصدر</th></tr></thead>
+  <tbody>
+  {% for row in requests %}
+    <tr>
+      <td>{{ row.company }}</td>
+      <td>{{ row.label }}</td>
+      <td><b class="countdown" data-due="{{ row.due_at }}" data-late="{{ copy.LATE_BY }}">--:--</b></td>
+      <td>{% if row.live %}من لوحة رصد في هذا العرض{% else %}{{ copy.SIMULATED }}{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p><a class="button" href="/elm/mockup">التجمعات وبطاقة الأداء ({{ copy.MOCKUP_LABEL }})</a></p>
+{% endblock %}
+{% block scripts %}<script src="/static/board.js"></script>{% endblock %}

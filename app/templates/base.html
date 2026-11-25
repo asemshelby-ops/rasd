@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ar" dir="rtl"{% block html_class %}{% endblock %}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}رصد{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+<a class="skip" href="#main">انتقل إلى المحتوى</a>
+<header class="top">
+  <strong class="brand">رصد</strong>
+  <nav aria-label="صفحات رصد">
+    <a href="/">البداية</a>
+    <a href="/board">لوحة الحالات</a>
+    <a href="/elm">متابعة بدل الفاقد</a>
+    <a href="/before-after">قبل وبعد</a>
+  </nav>
+</header>
+<main id="main">
+{% block main %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

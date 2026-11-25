@@ -14,7 +14,7 @@ what a problem means for the pilgrim at each point of the journey. It was not
 fitted to the test reports.
 """
 
-from rasd.numbers import normalise
+from rasd.numbers import normalise, unglued
 from rasd.schema import RISKS, STAGES, URGENCIES
 
 OWNER_BY_TYPE = {
@@ -90,15 +90,17 @@ def match_hotel(text: str) -> str | None:
     words = _folded(text)
     if not words:
         return None
-    wanted = f" {' '.join(words)} "
-    names = {hotel: f" {' '.join(_folded(hotel))} " for hotel in HOTELS}
-    # The whole name of a hotel we know is in the text.
+    names = {hotel: _folded(hotel) for hotel in HOTELS}
+    # The whole name of a hotel we know is in the text. A short word may be glued
+    # to the front of the name: "بدار المنارة" (in Dar al-Manara).
     for hotel, name in names.items():
-        if name in wanted:
-            return hotel
+        for start in range(len(words) - len(name) + 1):
+            if name[0] in unglued(words[start]) and words[start + 1 : start + len(name)] == name[1:]:
+                return hotel
     # The text is a part of the name of exactly one hotel we know: people often
     # leave out a first word such as "نزل" or "برج". A part two hotels share is not guessed.
-    partly = [hotel for hotel, name in names.items() if wanted in name]
+    parts = [f" {' '.join([first] + words[1:])} " for first in unglued(words[0])]
+    partly = [hotel for hotel, name in names.items() if any(part in f" {' '.join(name)} " for part in parts)]
     if len(partly) == 1:
         return partly[0]
     written = [word for word in text.split() if _folded(word)]

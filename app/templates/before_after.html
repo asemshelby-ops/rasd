@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}قبل وبعد{% endblock %}
+{% block body_class %}before-after-page{% endblock %}
+{% block main %}
+<h1>قبل وبعد</h1>
+<div class="before-after">
+  <section class="before" aria-labelledby="before-title">
+    <h2 id="before-title">{{ copy.BEFORE_TITLE }}</h2>
+    <p class="tag">{{ copy.FICTIONAL_GROUP }}</p>
+    <ol class="chat group-chat">
+      {% for message in scene.messages %}
+      <li class="bubble theirs">
+        <span class="sender">{{ message.sender }}</span>
+        {% if message.photo %}<span class="photo-box" role="img" aria-label="صورة: {{ message.photo }}">صورة: {{ message.photo }}</span>{% endif %}
+        {% if message.text %}<span class="words" dir="auto">{{ message.text }}</span>{% endif %}
+        <time>{{ message.time }}</time>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  <section class="after" aria-labelledby="after-title">
+    <h2 id="after-title">{{ copy.AFTER_TITLE }}</h2>
+    {% for case in scene.cases %}
+    <article class="case priority-{{ case.priority }}">
+      <header class="case-head">
+        <span class="chip chip-{{ case.priority }}">{{ case.priority_label }}</span>
+        <h3>{{ case.label }}</h3>
+      </header>
+      <p class="case-type">{{ case.type }}</p>
+      <p class="case-place">{{ case.place }}</p>
+      <p class="case-owner">إلى: {{ case.owner }}</p>
+      {% if case.question %}<p class="case-note">سُئل المرسل: {{ case.question }}</p>{% endif %}
+      {% if case.photo %}<p class="case-note">{{ copy.PHOTO_ATTACHED }}</p>{% endif %}
+    </article>
+    {% endfor %}
+    <p class="case-note">{{ copy.NOT_REPORTS_NOTE }}: {{ scene.not_reports }}</p>
+    <p class="case-note">{{ copy.FOUND_IT_NOTE }}</p>
+  </section>
+</div>
+{% endblock %}

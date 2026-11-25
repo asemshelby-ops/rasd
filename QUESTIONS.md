@@ -105,3 +105,66 @@ what was chosen, why, and how to change it.
 
 ## Stage 3
 
+
+31. **The corner label is shown in Arabic**: «نموذج أولي: ربط واتساب للأعمال
+    بانتظار الموافقة». The owner wrote it in English; every interface is Arabic.
+32. **A reporting page belongs to one hotel's counter.** A message that names no
+    hotel is taken to be about that hotel. This is how "the same reporting
+    hotel" is known when two lost-pilgrim reports are merged.
+33. **Lost-pilgrim merge**: same hotel, within 15 minutes of the case's latest
+    report (`LOST_PILGRIM_WINDOW_MINUTES`), even when one of the reports is
+    waiting for the supervisor, because the pilgrim's own note has no room. Never
+    into a closed case, and a report with no hotel never merges. Known cost: two
+    different pilgrims lost at the same counter within 15 minutes become one
+    case. The case shows its report count, so a supervisor can see it.
+34. **The mock card.** The reader refuses any card that is not visibly marked
+    SPECIMEN / «نموذج تجريبي». This is the one place a photo is analysed and a
+    visa number reaches the model; the card is fictional and its number is
+    invented (it starts with 999000). The card photo and the pilgrim photo are
+    not stored. The card copies no real card: no emblem, no logo.
+35. **The Elm lookup** is one small interface (`ElmDirectory.lookup(name,
+    visa_number)`). `SimulatedElm` answers from `data/simulated_elm.json`. It is
+    also served on its own address (`/simulated-elm/lookup`), and every answer
+    says `simulated`.
+36. **Board states**: waiting for the supervisor, with the owner, past its
+    time, closed. Critical first in each column. "One tap" to close: the
+    supervisor types a name once, the browser remembers it, and each close is
+    logged with that name and the time. Closing without a name is refused.
+37. **Voice.** There is no speech-to-text key and no real recording. The two
+    saved voice notes are placeholder tones with their words in
+    `demo/scene/transcripts.json`. The live path (`OpenAITranscriber`) is
+    written and has never run. The team must record the two notes.
+38. **A hotel glued to a short word was dropped silently** (found while
+    building the before-and-after page; `superpowers:systematic-debugging`).
+    Cause in one line: the message wrote «بدار المنارة», the model returned the
+    bare name «دار المنارة», and our word-for-word check did not find it in the
+    message, so the hotel was dropped with no flag. Fix: a name (hotel or
+    pilgrim) also counts when a short word (و ف ب ل ك) is glued to its front,
+    and the hotel table recognises a known hotel behind such a word. Verified
+    with unit tests and by reading the message again with the real model.
+39. **The "after" side of the before-and-after page is not written by hand.**
+    It is Rasd's real reading of the invented group (`python -m
+    app.before_after`, nine calls).
+40. **Elm view**: the other companies' rows are invented, with fixed times
+    left. The mockup screen writes «مثال» beside every number.
+41. **Accessibility review of the board** (`design:accessibility-review`).
+    All text and border colours pass (lowest text ratio 7.6 to 1). Fixed: the
+    whole board was announced to screen readers on every refresh (now only a
+    new case or a moved case is announced); keyboard focus was lost, or the
+    board froze, while a button had focus (focus now stays on the same button
+    across refreshes); the focus ring did not show on the dark top bar; type
+    was too small for a hall (all sizes now scale with the screen, and two
+    buttons scale them further). Accepted and not changed: the board updates by
+    itself with no pause control, because a live board must.
+42. **Photos are made smaller on the phone before they are sent** (longest
+    side 1600 pixels): a phone photo is too large for a hotspot and for the
+    card reader.
+43. **The replacement request is filled in and shown, not sent.** The page says
+    so. Passport and visa numbers appear only as "held, not shown here".
+44. **Live check of the scene**: all six steps passed with the real small model
+    (two voice-note readings, the card, the simulated lookup, the notification,
+    the close). A reading took 2.3 to 3.1 seconds and the card 1.5 to 1.9
+    seconds. The first of two runs was repeated because of a mistake in the
+    check script, not in Rasd.
+45. **In the scene the place reads «برج السكينة، مرفق عام»**: the model takes
+    "at the reception" as a common area. Left as it is.

@@ -1,0 +1,50 @@
+<div class="columns" data-now="{{ now }}">
+{% for state, title in copy.STATES.items() %}
+  <section class="column column-{{ state }}" aria-labelledby="column-{{ state }}">
+    <h2 id="column-{{ state }}">{{ title }} <span class="count"><span class="visually-hidden">{{ copy.CASES_COUNT }}: </span>{{ columns[state] | length }}</span></h2>
+    {% for case in columns[state] %}
+    <article class="case priority-{{ case.priority }}" data-case="{{ case.id }}" data-state="{{ case.state }}" data-state-label="{{ case.state_label }}" aria-label="{{ case.label }}، {{ case.type }}، الأولوية {{ case.priority_label }}">
+      <header class="case-head">
+        <span class="chip chip-{{ case.priority }}">{{ case.priority_label }}</span>
+        <h3>{{ case.label }}</h3>
+      </header>
+      <p class="case-type">{{ case.type }}</p>
+      <p class="case-place">{{ case.place }}</p>
+      <p class="case-owner">إلى: {{ case.owner }}</p>
+      {% if case.count > 1 %}<p class="case-count">{{ case.count_text }}</p>{% endif %}
+      {% if case.photo_attached %}<p class="case-note">{{ copy.PHOTO_ATTACHED }}</p>{% endif %}
+      {% if case.identified_text %}<p class="case-identified">{{ case.identified_text }}</p>{% endif %}
+      {% if case.state == "closed" %}
+        <p class="case-closed">{{ copy.CLOSED_BY }} {{ case.closed_by }}، <time datetime="{{ case.closed_at }}">{{ case.closed_at[11:16] }}</time></p>
+      {% else %}
+        {% if case.acknowledge_due and not case.acknowledged %}
+          <p class="clock"><span>{{ copy.ACKNOWLEDGE_WITHIN }}</span> <b class="countdown" data-due="{{ case.acknowledge_due }}" data-late="{{ copy.LATE_BY }}">--:--</b></p>
+        {% elif case.acknowledged %}
+          <p class="case-note">{{ copy.ACKNOWLEDGED }}</p>
+        {% endif %}
+        <p class="clock"><span>{{ copy.CLOSE_WITHIN }}</span> <b class="countdown" data-due="{{ case.close_due }}" data-late="{{ copy.LATE_BY }}">--:--</b></p>
+        {% if case.replacement_due %}
+          <p class="clock replacement"><span>{{ copy.REPLACEMENT }}: {{ copy.REPLACEMENT_WITHIN }}</span> <b class="countdown" data-due="{{ case.replacement_due }}" data-late="{{ copy.LATE_BY }}">--:--</b></p>
+          <p class="case-note"><a href="/cases/{{ case.id }}/replacement">{{ copy.OPEN_REQUEST }}</a></p>
+        {% endif %}
+        <div class="actions">
+          {% if case.state == "waiting" %}<button type="button" data-action="confirm" data-case="{{ case.id }}">{{ copy.CONFIRM }}</button>{% endif %}
+          {% if case.acknowledge_due and not case.acknowledged %}<button type="button" data-action="acknowledge" data-case="{{ case.id }}">{{ copy.ACKNOWLEDGE }}</button>{% endif %}
+          <button type="button" class="close" data-action="close" data-case="{{ case.id }}">{{ copy.CLOSE }}</button>
+        </div>
+      {% endif %}
+    </article>
+    {% else %}
+    <p class="empty">{{ copy.NO_CASES }}</p>
+    {% endfor %}
+  </section>
+{% endfor %}
+</div>
+<section class="notifications" aria-labelledby="notifications-title">
+  <h2 id="notifications-title">{{ copy.NOTIFICATIONS }} <span class="tag">{{ copy.SIMULATED }}</span></h2>
+  {% for note in notifications %}
+  <p class="notification"><time datetime="{{ note.at }}">{{ note.at[11:16] }}</time> {{ note.text }}</p>
+  {% else %}
+  <p class="empty">{{ copy.NO_NOTIFICATIONS }}</p>
+  {% endfor %}
+</section>

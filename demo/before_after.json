@@ -1,0 +1,110 @@
+{
+  "messages": [
+    {
+      "sender": "أبو فهد (مشرف المناوبة)",
+      "time": "7:58",
+      "text": "صباح الخير يا شباب، الحضور: مناوبة الصباح كاملة ✅",
+      "photo": null
+    },
+    {
+      "sender": "ماجد",
+      "time": "8:01",
+      "text": "حاضر 🙋",
+      "photo": null
+    },
+    {
+      "sender": "استقبال دار المنارة",
+      "time": "8:03",
+      "text": "الحاجة اللي في غرفة 412 بدار المنارة تقول ما وصلتها هدية الضيافة لين الحين",
+      "photo": null
+    },
+    {
+      "sender": "ماجد",
+      "time": "8:04",
+      "text": "ترى باص الزيارة يتحرك 9 ونص لا أحد يتأخر",
+      "photo": null
+    },
+    {
+      "sender": "صيانة",
+      "time": "8:06",
+      "text": "شوفوا الماسورة تسرّب موية قوي",
+      "photo": "ماسورة تسرّب"
+    },
+    {
+      "sender": "استقبال برج السكينة",
+      "time": "8:09",
+      "text": "حاج في برج السكينة غرفة 620 ضيّع بطاقة نسك، اسمه نبيل سعد",
+      "photo": null
+    },
+    {
+      "sender": "أبو فهد (مشرف المناوبة)",
+      "time": "8:12",
+      "text": "أحد عنده شاحن آيفون؟",
+      "photo": null
+    },
+    {
+      "sender": "استقبال نزل الياسمين",
+      "time": "8:20",
+      "text": "عندنا في نزل الياسمين حاجة كبيرة في السن تايهة ما تعرف غرفتها ولا تتكلم عربي",
+      "photo": null
+    },
+    {
+      "sender": "ماجد",
+      "time": "8:31",
+      "text": "لقيناها 👍",
+      "photo": null
+    }
+  ],
+  "cases": [
+    {
+      "label": "بلاغ 4",
+      "type": "حاج تائه أو لا يستطيع التواصل",
+      "place": "نزل الياسمين",
+      "priority": "critical",
+      "priority_label": "حرج",
+      "owner": "شؤون الحجاج",
+      "state": "late",
+      "count_text": null,
+      "question": null,
+      "photo": false
+    },
+    {
+      "label": "بلاغ 2",
+      "type": "انقطاع الماء",
+      "place": "المكان غير معروف",
+      "priority": "urgent",
+      "priority_label": "عاجل",
+      "owner": "الصيانة",
+      "state": "waiting",
+      "count_text": null,
+      "question": "ما رقم الغرفة أو الدور؟",
+      "photo": true
+    },
+    {
+      "label": "ن · بلاغ 3",
+      "type": "بطاقة نسك مفقودة أو تالفة",
+      "place": "برج السكينة، غرفة 620",
+      "priority": "urgent",
+      "priority_label": "عاجل",
+      "owner": "شؤون الحجاج",
+      "state": "late",
+      "count_text": null,
+      "question": null,
+      "photo": false
+    },
+    {
+      "label": "بلاغ 1",
+      "type": "هدايا أو توزيعات لم تُستلم",
+      "place": "دار المنارة، غرفة 412",
+      "priority": "normal",
+      "priority_label": "عادي",
+      "owner": "شؤون الحجاج",
+      "state": "routed",
+      "count_text": null,
+      "question": null,
+      "photo": false
+    }
+  ],
+  "not_reports": 5,
+  "note": "Written by `python -m app.before_after`. The cases are Rasd's own reading of the invented messages in whatsapp_group.json, made on 2026-11-25. Do not edit by hand."
+}

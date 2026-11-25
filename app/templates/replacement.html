@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ copy.REPLACEMENT_TITLE }}{% endblock %}
+{% block body_class %}elm-page{% endblock %}
+{% block main %}
+<h1>{{ copy.REPLACEMENT_TITLE }}</h1>
+<p class="tag">{{ copy.REQUEST_NOT_SENT }}</p>
+<p class="lead">{{ request_for.pilgrim }}{% if request_for.hotel %}، فندق {{ request_for.hotel }}{% endif %}{% if request_for.room %}، غرفة {{ request_for.room }}{% endif %}</p>
+<p class="clock" data-now="{{ now }}"><span>{{ copy.REPLACEMENT_WITHIN }}</span> <b class="countdown" data-due="{{ request_for.due_at }}" data-late="{{ copy.LATE_BY }}">--:--</b></p>
+<table class="elm">
+  <caption>ما يحتاجه الطلب، وما وصل منه في البلاغ</caption>
+  <thead><tr><th scope="col">البند</th><th scope="col">حالته</th></tr></thead>
+  <tbody>
+  {% for item, state in items %}
+    <tr><th scope="row">{{ item }}</th><td>{{ state }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p><a class="button" href="/board">{{ copy.BACK_TO_BOARD }}</a></p>
+{% endblock %}
+{% block scripts %}<script src="/static/board.js"></script>{% endblock %}

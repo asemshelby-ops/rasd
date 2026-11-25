@@ -9,6 +9,7 @@ import pytest
 from rasd.numbers import (
     HUNDRED_ENDINGS,
     TEEN_ENDINGS,
+    contains_name,
     contains_number,
     contains_words,
     contains_words_in_order,
@@ -322,3 +323,29 @@ def test_a_word_cannot_be_used_twice():
 def test_empty_words_are_never_found():
     assert contains_words_in_order(SMOKE, "") is False
     assert contains_words_in_order(SMOKE, " ، ") is False
+
+
+# --- a name with a short word glued to its front ("بدار المنارة") --------------------
+
+
+@pytest.mark.parametrize("written", ["بدار المنارة", "لدار المنارة", "وبدار المنارة", "فلدار المنارة", "كدار المنارة", "ودار المنارة"])
+def test_a_name_is_found_when_a_short_word_is_glued_to_its_front(written):
+    assert contains_name(f"الموية مقطوعة {written} من الصبح", "دار المنارة")
+
+
+def test_a_name_that_starts_with_the_article_is_found_after_a_glued_lam():
+    assert contains_name("وصّلوه للمنارة بعد العصر", "المنارة")
+    assert contains_name("هو ساكن بالمنارة", "المنارة")
+
+
+def test_a_name_is_still_found_when_nothing_is_glued_to_it():
+    assert contains_name("الموية مقطوعة في دار المنارة", "دار المنارة")
+
+
+@pytest.mark.parametrize("written", ["قدار المنارة", "بدارين المنارة", "بدار", "المنارة بدار"])
+def test_a_glued_word_does_not_make_other_words_match(written):
+    assert not contains_name(f"الموية مقطوعة {written} من الصبح", "دار المنارة")
+
+
+def test_an_empty_name_is_never_found():
+    assert not contains_name("الموية مقطوعة بدار المنارة", "")

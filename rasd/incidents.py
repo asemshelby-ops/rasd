@@ -9,6 +9,10 @@ The rule (no AI in here):
   - anything else starts a new incident
 The place is the hotel together with the room, floor or elevator number.
 
+A lost pilgrim has no room, so that type has its own rule: two reports of a lost
+pilgrim from the same hotel within LOST_PILGRIM_WINDOW_MINUTES are one case, for
+example the counter employee's message and the pilgrim's own voice note.
+
 A message that is not a report (attendance, chat, a reply) makes no incident.
 
 Closing: an incident is closed only by close_incident(), which records when and
@@ -39,6 +43,9 @@ from rasd.understand import Understanding
 # problem still counts as the same incident. This is the team's judgement, not a
 # measured value: change it here.
 MERGE_WINDOW_MINUTES = 60
+
+# Two reports of a lost pilgrim from the same hotel within this many minutes are one case.
+LOST_PILGRIM_WINDOW_MINUTES = 15
 
 _MOST_URGENT_FIRST = list(URGENCIES)
 
@@ -78,6 +85,17 @@ def _may_take(incident: Incident, report: Understanding, sent_at: datetime, wind
     )
 
 
+def _same_lost_pilgrim(incident: Incident, report: Understanding, sent_at: datetime) -> bool:
+    """True when this open case is a lost pilgrim at the same hotel, reported a short while ago."""
+    return (
+        incident.type == report.type == "lost_pilgrim"
+        and incident.closed_at is None
+        and incident.hotel is not None
+        and incident.hotel == report.hotel
+        and sent_at - incident.last_at <= timedelta(minutes=LOST_PILGRIM_WINDOW_MINUTES)
+    )
+
+
 def add_report(
     incidents: list[Incident],
     report_id: int,
@@ -94,13 +112,13 @@ def add_report(
     if not report.is_report:
         return None
     window = timedelta(minutes=window_minutes)
-    if can_merge(report):
-        for incident in reversed(incidents):  # the latest incident first
-            if _may_take(incident, report, sent_at, window):
-                incident.report_ids.append(report_id)
-                incident.last_at = sent_at
-                incident.urgency = min(incident.urgency, report.urgency, key=_MOST_URGENT_FIRST.index)
-                return incident
+    for incident in reversed(incidents):  # the latest incident first
+        usual = can_merge(report) and _may_take(incident, report, sent_at, window)
+        if usual or _same_lost_pilgrim(incident, report, sent_at):
+            incident.report_ids.append(report_id)
+            incident.last_at = sent_at
+            incident.urgency = min(incident.urgency, report.urgency, key=_MOST_URGENT_FIRST.index)
+            return incident
     incident = Incident(
         type=report.type,
         hotel=report.hotel,

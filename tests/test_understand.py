@@ -767,3 +767,23 @@ def test_a_missing_key_is_reported_by_name(monkeypatch, tmp_path):
     monkeypatch.delenv("RASD_CLAUDE_KEY", raising=False)
     with pytest.raises(RuntimeError, match="RASD_CLAUDE_KEY"):
         make_client(env_file=tmp_path / "no-such-file")
+
+
+# --- a hotel or a name written with a short word glued to its front --------------------------
+
+
+@pytest.mark.parametrize("written", ["بدار المنارة", "لدار المنارة", "وبدار المنارة"])
+def test_a_hotel_written_with_a_glued_short_word_is_kept(written):
+    """The model returns the bare name; the message has "بدار". The hotel must not be lost."""
+    report = build_report(f"المكيف واقف في غرفة 533 {written}", reading(type="ac", hotel="دار المنارة", number_words="533", location_number="533"))
+    assert report.hotel == "دار المنارة"
+
+
+def test_a_hotel_the_model_copied_with_its_glued_short_word_is_still_the_hotel_we_know():
+    report = build_report("المكيف واقف في غرفة 533 بدار المنارة", reading(type="ac", hotel="بدار المنارة", number_words="533", location_number="533"))
+    assert report.hotel == "دار المنارة"
+
+
+def test_a_pilgrims_name_written_with_a_glued_short_word_is_kept():
+    report = build_report("سلّموا الدواء ليوسف حمدان في غرفة 533", reading(type="health", pilgrim_name="يوسف حمدان", number_words="533", location_number="533"))
+    assert report.pilgrim_name == "يوسف حمدان"

@@ -28,6 +28,7 @@ from rasd.numbers import (
     HUNDRED_ENDINGS,
     TEEN_ENDINGS,
     as_written,
+    contains_name,
     contains_number,
     contains_words,
     contains_words_in_order,
@@ -338,8 +339,8 @@ def build_report(
     if kind not in NUMBERED_PLACES:
         number = None
     # The hotel and the pilgrim's name are kept only when their words are really in the message.
-    hotel = match_hotel(reading.hotel) if contains_words_in_order(message, reading.hotel) else None
-    name = reading.pilgrim_name.strip() if contains_words_in_order(message, reading.pilgrim_name) else None
+    hotel = match_hotel(reading.hotel) if contains_name(message, reading.hotel) else None
+    name = reading.pilgrim_name.strip() if contains_name(message, reading.pilgrim_name) else None
 
     # The risks the model says the message states: kind -> the words it quoted.
     quoted = {}

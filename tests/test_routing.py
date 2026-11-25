@@ -335,3 +335,20 @@ def test_a_part_shared_by_two_known_hotels_is_not_guessed(monkeypatch):
 
 def test_words_that_are_in_no_known_hotel_stay_as_written():
     assert match_hotel("الياسمين الجديد") == "الياسمين الجديد"
+
+
+# --- a hotel name with a short word glued to its front ("بدار المنارة") ------------------
+
+
+@pytest.mark.parametrize("written", ["بدار المنارة", "لدار المنارة", "وبدار المنارة", "ببرج السكينة", "في غرفة 533 بنزل الياسمين"])
+def test_a_known_hotel_is_recognised_with_a_short_word_glued_to_its_name(written):
+    assert match_hotel(written) in HOTELS
+
+
+def test_a_known_hotel_is_recognised_by_its_own_part_with_a_short_word_glued_to_it():
+    assert match_hotel("بالياسمين") == "نزل الياسمين"
+    assert match_hotel("للياسمين") == "نزل الياسمين"
+
+
+def test_a_glued_letter_is_not_taken_off_a_hotel_we_do_not_know():
+    assert match_hotel("بيت الضيافة") == "بيت الضيافة"

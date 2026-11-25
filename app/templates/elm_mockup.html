@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ copy.MOCKUP_LABEL }}{% endblock %}
+{% block body_class %}elm-page mockup-page{% endblock %}
+{% block main %}
+<p class="banner" role="note">{{ copy.MOCKUP_LABEL }}: {{ copy.SAMPLE_NUMBERS }}</p>
+<h1>التجمعات وبطاقة الأداء</h1>
+<p class="lead">شاشة ثابتة تبيّن الفكرة فقط. لا شيء فيها محسوب من بيانات.</p>
+<div class="mockup-grid">
+  <section aria-labelledby="clusters-title">
+    <h2 id="clusters-title">تجمعات البلاغات <span class="tag">{{ copy.MOCKUP_LABEL }}</span></h2>
+    <ul class="clusters">
+      <li><b>مثال:</b> بطاقات نسك مفقودة قرب بوابة واحدة في يوم واحد</li>
+      <li><b>مثال:</b> أعطال تكييف متكررة في فندق واحد</li>
+      <li><b>مثال:</b> حجاج تائهون من مجموعة واحدة بعد الانتقال</li>
+    </ul>
+  </section>
+  <section aria-labelledby="scorecard-title">
+    <h2 id="scorecard-title">بطاقة أداء الشركات <span class="tag">{{ copy.MOCKUP_LABEL }}</span></h2>
+    <table class="elm">
+      <caption>{{ copy.SAMPLE_NUMBERS }}</caption>
+      <thead><tr><th scope="col">الشركة</th><th scope="col">بدل فاقد خلال 24 ساعة</th><th scope="col">الحالات الحرجة المستلمة في وقتها</th></tr></thead>
+      <tbody>
+        <tr><td>شركة مثال أ</td><td>مثال: 9 من 10</td><td>مثال: 4 من 5</td></tr>
+        <tr><td>شركة مثال ب</td><td>مثال: 6 من 10</td><td>مثال: 5 من 5</td></tr>
+        <tr><td>شركة مثال ج</td><td>مثال: 8 من 10</td><td>مثال: 3 من 5</td></tr>
+      </tbody>
+    </table>
+  </section>
+</div>
+<p><a class="button" href="/elm">عودة إلى متابعة بدل الفاقد</a></p>
+{% endblock %}
