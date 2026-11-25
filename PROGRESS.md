@@ -168,4 +168,5 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
   supervisor pages; speech to text made ready for the key
   (`python -m demo.check_speech`). QUESTIONS.md 82 to 87.
 - Tests: 878 passed. No API calls, no benchmark run.
-
+- Then: after "نعم" the duplicate check runs again against open cases
+  (QUESTIONS.md 85). Tests: 886 passed. No API calls.

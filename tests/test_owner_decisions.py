@@ -296,3 +296,83 @@ def test_the_check_tool_says_what_to_do_when_the_key_is_missing(tmp_path, capsys
     recording.write_bytes(b"sound")
     assert check_speech.main([str(recording)]) != 0
     assert "RASD_OPENAI_KEY" in capsys.readouterr().err
+
+
+# --- after "نعم", the duplicate check runs again against the open cases of that hotel ---------------------
+
+FIRST = "المكيف خربان في برج السكينة غرفة 907"
+SLIP = "المكيف خربان في برج السكينا غرفة 907"
+
+
+def first_then_slip(site, minutes_between=5):
+    site.engine.readings[FIRST] = reading(type="ac", hotel="برج السكينة")
+    site.engine.readings[SLIP] = reading(type="ac", hotel="برج السكينا")
+    send(site, FIRST, hotel="")
+    site.clock.now += timedelta(minutes=minutes_between)
+    return send(site, SLIP, hotel="")
+
+
+def tap(site, reply, answer_text):
+    return site.post(f"/api/reports/{reply['report_id']}/answer", data={"reply": answer_text}).json()
+
+
+def test_before_the_tap_the_slip_is_its_own_waiting_case(site):
+    first_then_slip(site)
+    assert [case["count"] for case in cases(site)] == [1, 1]
+
+
+def test_yes_joins_the_report_to_the_open_case_of_that_hotel(site):
+    reply = first_then_slip(site)
+    answered = tap(site, reply, "نعم")
+    assert answered["merged"] is True and answered["case_id"] == 1
+    assert answered["message"] == copy.merged(1, 2)
+    (case,) = cases(site)  # the slip's own card is gone
+    assert case["id"] == 1 and case["count_text"] == "بلاغان، حالة واحدة" and case["state"] == "routed"
+    whats = [event["what"] for event in site.get("/api/cases/1/events").json()["events"]]
+    assert whats.count("reported") == 2 and "answered" in whats
+
+
+def test_no_leaves_two_cases(site):
+    tap(site, first_then_slip(site), "لا")
+    assert len(cases(site)) == 2
+
+
+def test_yes_does_not_join_a_closed_case(site):
+    site.engine.readings[FIRST] = reading(type="ac", hotel="برج السكينة")
+    site.engine.readings[SLIP] = reading(type="ac", hotel="برج السكينا")
+    send(site, FIRST, hotel="")
+    site.post("/api/cases/1/close", data={"who": "سالم"})
+    answered = tap(site, send(site, SLIP, hotel=""), "نعم")
+    assert answered["merged"] is False and len(cases(site)) == 2
+
+
+def test_yes_does_not_join_a_case_older_than_the_merge_window(site):
+    answered = tap(site, first_then_slip(site, minutes_between=61), "نعم")
+    assert answered["merged"] is False and len(cases(site)) == 2
+
+
+def test_the_window_is_counted_from_when_the_report_was_sent_not_from_the_tap(site):
+    reply = first_then_slip(site, minutes_between=50)
+    site.clock.now += timedelta(minutes=30)  # the sender taps half an hour later
+    assert tap(site, reply, "نعم")["merged"] is True
+
+
+def test_yes_does_not_join_a_case_about_another_room(site):
+    site.engine.readings["المكيف خربان في برج السكينة غرفة 512"] = reading(type="ac", hotel="برج السكينة", number_words="512", location_number="512")
+    site.engine.readings[SLIP] = reading(type="ac", hotel="برج السكينا")
+    send(site, "المكيف خربان في برج السكينة غرفة 512", hotel="")
+    assert tap(site, send(site, SLIP, hotel=""), "نعم")["merged"] is False
+
+
+def test_what_belonged_to_the_report_moves_with_it(site, tmp_path):
+    import sqlite3
+
+    slip_with_number = SLIP + "، جواز الحاج A1234567"
+    site.engine.readings[FIRST] = reading(type="ac", hotel="برج السكينة")
+    site.engine.readings[SLIP + "، جواز الحاج [رقم جواز]"] = reading(type="ac", hotel="برج السكينا")
+    send(site, FIRST, hotel="")
+    tap(site, send(site, slip_with_number, hotel=""), "نعم")
+    db = sqlite3.connect(tmp_path / "rasd.db")
+    assert db.execute("select case_id from private_numbers").fetchall() == [(1,)]
+    assert db.execute("select count(*) from cases").fetchone()[0] == 1
+    assert db.execute("select distinct case_id from reports").fetchall() == [(1,)]

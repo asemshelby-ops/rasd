@@ -18,7 +18,7 @@ these before changing anything:
   has not yet confirmed them, except the three listed below. Treat the rest as provisional.
 - `DEMO.md` (Arabic): demo-day guide. `WHATSAPP_COUNT.md` (Arabic): the counting tool.
 
-What exists (878 tests, `python -m pytest`, no key and no network needed):
+What exists (886 tests, `python -m pytest`, no key and no network needed):
 
 - `rasd/`: the rules. The model READS a message (`understand.py`); the team's
   tables DECIDE owner, priority and deadlines (`routing.py`); our code CHECKS
@@ -119,7 +119,8 @@ Decided by the owner on 26 November 2026, after the morning report (built and te
 - A late report that waits for the supervisor moves to the overdue column.
 - A hotel name with a small transcription error is matched only against the
   company's own hotel list and never corrected silently: the sender is asked
-  with one tap, "Did you mean <hotel>?".
+  with one tap, "Did you mean <hotel>?". After "Yes" the duplicate check runs
+  again against the open cases (`Store._join_open_case`).
 - The operator page and the supervisor page ask for a PIN (`RASD_PIN` in
   `.env`; a random one is printed at start when it is not set).
 - Speech to text is ready for the key: `python -m demo.check_speech FILE` tries

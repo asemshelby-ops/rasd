@@ -196,14 +196,44 @@ class Store:
             raise NoSuchCase
         return _report_from_json(row["report"]), row["case_id"]
 
-    def answer_question(self, report_id: int, reply: str, at: datetime) -> tuple[Understanding, int | None]:
-        """The sender's reply fills the same report. Raises NothingToAnswer when no question is open."""
+    def _join_open_case(self, case_id: int, report_id: int, report: Understanding) -> int | None:
+        """Runs the duplicate check again for a report that is a case of its own, against the other cases.
+
+        When the tested merge rules (rasd/incidents.py) put it into another open case, the report
+        moves there with everything that belongs to it, its own card is removed, and that case's
+        id is returned. Otherwise nothing changes and None is returned. The merge window is
+        counted from when the report was SENT, not from now.
+        """
+        sent_at = datetime.fromisoformat(
+            self.db.execute("select received_at from reports where id = ?", (report_id,)).fetchone()["received_at"]
+        )
+        rows = self.db.execute("select id, incident from cases where id != ? order by id", (case_id,)).fetchall()
+        others = [_incident_from_json(row["incident"]) for row in rows]
+        landed = add_report(others, report_id, sent_at, report)
+        position = next((i for i, known in enumerate(others[: len(rows)]) if known is landed), None)
+        if position is None:
+            return None
+        target = rows[position]["id"]
+        self.db.execute("update cases set incident = ? where id = ?", (_incident_to_json(landed), target))
+        for table in ("reports", "private_numbers", "events", "notifications"):
+            column = "id" if table == "reports" else "case_id"
+            value = report_id if table == "reports" else case_id
+            self.db.execute(f"update {table} set case_id = ? where {column} = ?", (target, value))
+        self.db.execute("delete from cases where id = ?", (case_id,))
+        return target
+
+    def answer_question(self, report_id: int, reply: str, at: datetime) -> tuple[Understanding, int | None, bool]:
+        """The sender's reply fills the same report. Raises NothingToAnswer when no question is open.
+
+        Returns (the report, its case, whether the reply made it join another open case).
+        """
         with self.lock, self.db:
             report, case_id = self.report(report_id)
             question = ask_back(report)
             if question is None:
                 raise NothingToAnswer
             completed = answer(report, question, reply)
+            joined = False
             self.db.execute("update reports set report = ? where id = ?", (_report_to_json(completed), report_id))
             if case_id is not None:
                 row = self.db.execute("select incident from cases where id = ?", (case_id,)).fetchone()
@@ -223,9 +253,16 @@ class Store:
                         "update cases set incident = ?, waiting = ? where id = ?",
                         (_incident_to_json(incident), int(completed.needs_confirmation), case_id),
                     )
+                # The sender confirmed the hotel ("نعم"): the report may now be a duplicate of an open
+                # case of that hotel, so the duplicate check runs again (owner's decision).
+                confirmed_hotel = question.field == "hotel_confirm" and completed.hotel != report.hotel
+                if confirmed_hotel and incident.report_ids == [report_id]:
+                    target = self._join_open_case(case_id, report_id, completed)
+                    if target is not None:
+                        case_id, joined = target, True
                 self._absorb(case_id, completed, at)
                 self._log(case_id, at, "sender", "answered")
-            return completed, case_id
+            return completed, case_id, joined
 
     # --- what people do to a case ----------------------------------------------------------
 

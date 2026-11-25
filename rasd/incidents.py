@@ -130,7 +130,7 @@ def add_report(
         usual = can_merge(report) and _may_take(incident, report, sent_at, window)
         if usual or _same_lost_pilgrim(incident, report, sent_at):
             incident.report_ids.append(report_id)
-            incident.last_at = sent_at
+            incident.last_at = max(incident.last_at, sent_at)  # a report placed late must not move the clock back
             incident.urgency = min(incident.urgency, report.urgency, key=_MOST_URGENT_FIRST.index)
             incident.pilgrim_name = incident.pilgrim_name or report.pilgrim_name
             incident.loc_number = incident.loc_number or (report.loc_number if report.type == "lost_pilgrim" else None)

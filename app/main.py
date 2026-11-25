@@ -264,12 +264,12 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
     @app.post("/api/reports/{report_id}/answer")
     def answer_question(report_id: int, reply: str = Form("")):
         try:
-            report, case_id = store.answer_question(report_id, reply, now())
+            report, case_id, joined = store.answer_question(report_id, reply, now())
         except NothingToAnswer:
             return problem(409, copy.ALREADY_ANSWERED)
         except NoSuchCase:
             return problem(404, copy.NOT_FOUND)
-        return answer_for(report_id, case_id, report)
+        return answer_for(report_id, case_id, report, joined)
 
     @app.post("/api/cases/{case_id}/card")
     def show_card(case_id: int, photo: UploadFile = File(...)):

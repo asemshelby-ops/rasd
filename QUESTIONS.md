@@ -338,8 +338,13 @@ Choices I made while building them:
     written and asks nothing more; any other reply changes nothing.
 84. **This question comes before the other ask-back questions**, since a
     report has one question only.
-85. **After "نعم" the report is not re-merged** into an older case of that
-    hotel; it stays its own case. Not built.
+85. **After "نعم" the duplicate check runs again** (owner's decision, 26
+    November 2026). If the usual merge rules put the report into another open
+    case of that hotel, it moves there with its events and private numbers and
+    its own card is removed. The window is counted from when the report was
+    sent, not from the tap. My choices: this runs only after the hotel
+    confirmation, not after other answers (a room number, a name); and only
+    for a report that is still a case of its own.
 86. **The PIN** is read from `RASD_PIN` in `.env`. When it is not set a random
     4-digit PIN is made at every start and printed in the laptop's terminal.
     Five wrong tries shut the door for one minute. It is entered once per
