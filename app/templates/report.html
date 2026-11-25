@@ -24,29 +24,34 @@
 <p id="report-message" class="message" role="alert" hidden></p>
 <p class="resend-row"><button type="button" id="resend" hidden>{{ copy.RESEND }}</button></p>
 <div class="composer">
+  {# Second option: the text box, with the one small "+" that opens the attachments. #}
   <div class="composer-row">
+    <details class="more" id="more">
+      <summary aria-label="{{ copy.MORE_ATTACHMENTS }}"><span aria-hidden="true">+</span></summary>
+      <div class="more-list">
+        <label class="file-button">{{ copy.ATTACH_AUDIO }}
+          <input id="audio-file" name="audio" type="file" accept="audio/*">
+        </label>
+        <label class="file-button">{{ copy.ATTACH_PHOTO }}
+          <input id="pilgrim-photo" name="pilgrim_photo" type="file" accept="image/*" capture="environment">
+        </label>
+        <label class="file-button" id="card-button" hidden>{{ copy.SHOW_CARD }}
+          <input id="card-photo" type="file" accept="image/*" capture="environment">
+        </label>
+        <p class="note">{{ copy.PHOTO_NOTE }}</p>
+      </div>
+    </details>
     <label class="visually-hidden" for="text">{{ copy.WRITE_HERE }}</label>
-    <textarea id="text" name="text" rows="2" placeholder="{{ copy.WRITE_HERE }}" dir="auto"></textarea>
-    <button type="submit" class="primary">{{ copy.SEND }}</button>
+    <textarea id="text" name="text" rows="1" placeholder="{{ copy.WRITE_HERE }}" dir="auto"></textarea>
+    <button type="submit">{{ copy.SEND }}</button>
   </div>
+  {# The main action: one large round button, centred at the bottom. #}
   <div class="record-row">
     <button type="button" id="record" class="record-main" aria-label="{{ copy.RECORD }}">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 15a4 4 0 0 0 4-4V6a4 4 0 0 0-8 0v5a4 4 0 0 0 4 4zm7-4a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V21H8a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2h-3v-3.08A7 7 0 0 0 19 11z"/></svg>
     </button>
     <p id="record-caption" class="record-caption">{{ copy.RECORD }}</p>
   </div>
-  <div class="attach-row">
-    <label class="file-button">{{ copy.ATTACH_AUDIO }}
-      <input id="audio-file" name="audio" type="file" accept="audio/*">
-    </label>
-    <label class="file-button">{{ copy.ATTACH_PHOTO }}
-      <input id="pilgrim-photo" name="pilgrim_photo" type="file" accept="image/*" capture="environment">
-    </label>
-    <label class="file-button" id="card-button" hidden>{{ copy.SHOW_CARD }}
-      <input id="card-photo" type="file" accept="image/*" capture="environment">
-    </label>
-  </div>
-  <p class="note">{{ copy.PHOTO_NOTE }}</p>
 </div>
 </form>
 {% endblock %}

@@ -256,3 +256,25 @@ def test_the_colours_of_the_brief_are_the_only_meaning_colours(site):
     for token in ("#EEF2F1", "#FFFFFF", "#10202B", "#4A5A66", "#D5DDDB", "#B3261E", "#B26A00", "#1F6F78", "#5B6770", "#0B6E4F"):
         assert token in css, token
     assert "PREFERS-REDUCED-MOTION" in css
+
+
+# --- the owner's review of the design (three changes) ---------------------------------------------------
+
+
+def test_the_priority_border_is_on_the_start_side_with_logical_css(site):
+    css = site.get("/static/style.css").text
+    assert "border-inline-start" in css and "border-left" not in css
+
+
+def test_the_record_button_is_the_only_main_action_on_the_phone_page(site):
+    page = site.get("/report").text
+    assert page.count("record-main") == 1 and 'class="primary"' not in page
+
+
+def test_the_attachments_are_behind_one_small_plus_button(site):
+    page = site.get("/report").text
+    more = page[page.index('<details class="more"') : page.index("</details>")]
+    assert f'aria-label="{copy.MORE_ATTACHMENTS}"' in more and ">+<" in more
+    for control in ('id="audio-file"', 'id="pilgrim-photo"', 'id="card-photo"'):
+        assert control in more
+    assert page.index('id="text"') < page.index('id="record"')  # the text box is the second option, above the record button

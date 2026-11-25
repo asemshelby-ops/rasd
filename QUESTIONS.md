@@ -386,8 +386,9 @@ as a messaging app. Choices I made where the brief was silent:
     the animation. With reduced motion there is no pulse.
 95. **Overdue takes no priority colour**, because each colour has one meaning:
     an overdue clock turns dark and says «تأخرت».
-96. **The thick priority border is on the left of every card**, as the brief
-    says "left", although the page reads right to left.
+96. **The thick priority border is on the start side of every card** (the
+    right, in Arabic), with logical CSS. The owner corrected the brief: "left"
+    was a mistake.
 97. **The label «المدد قيم تجريبية» stays on the board** as a small corner
     label, because unmeasured numbers must be labelled.
 98. **Accessibility review of the new screens** (`design:accessibility-review`).
@@ -401,4 +402,11 @@ as a messaging app. Choices I made where the brief was silent:
     does not scroll sideways. Not checked: a real screen reader.
 99. **Screenshots** before and after are in `screenshots/design/`, taken in
     replay mode (no API calls).
+
+**The owner approved 88 to 99 on review**, with three changes, all built: the
+border on the start side (96); one critical case spans the band and two or more
+share the row equally; on the phone page the record button is the only main
+action, the text box is the second option, and the three attachments are
+behind one small "+". My choice there: when the mock-card step becomes
+possible the "+" opens by itself, so the button is not hidden during the scene.
 

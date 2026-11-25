@@ -14,6 +14,7 @@
   var cardButton = document.getElementById("card-button");
   var record = document.getElementById("record");
   var message = document.getElementById("report-message");
+  var more = document.getElementById("more");
   var lastCase = null;
 
   function say(words) { message.textContent = words || ""; message.hidden = !words; }
@@ -55,9 +56,10 @@
     var data = result.data;
     if (data.heard) { bubble(T.heard + ": " + data.heard, true); }
     var reply = bubble(data.message, false);
-    if (data.identified) { cardButton.hidden = true; return; }
+    if (data.identified) { cardButton.hidden = true; if (more) { more.open = false; } return; }
     if (data.case_id) { lastCase = data.case_id; }
-    if (data.type === "lost_pilgrim") { cardButton.hidden = false; }
+    // The card step is now possible: its button appears and the "+" opens, so nobody has to look for it.
+    if (data.type === "lost_pilgrim") { cardButton.hidden = false; if (more) { more.open = true; } }
     if (data.question) { ask(reply, data); }
   }
 
