@@ -1,0 +1,338 @@
+"""The understanding function: message text -> report with type, place, owner, deadline and flag.
+
+The message texts and room numbers here are made up for these tests; they are
+not the benchmark reports.
+"""
+
+import json
+
+import anthropic
+import httpx2
+import pytest
+
+from rasd.data import load_expected, load_reports
+from rasd.numbers import normalise
+from rasd.routing import DEADLINE_MINUTES
+from rasd.schema import FLAG_REASONS, LOCATION_KINDS, TYPES, URGENCIES
+from rasd.understand import EFFORT, SYSTEM_PROMPT, Reading, build_report, make_client, understand
+
+MESSAGE = "ما في موية في غرفة تسعمية وسبعة من الصبح"
+
+
+def reading(**changes) -> Reading:
+    """A clear, correct reading of MESSAGE. Tests change one field at a time."""
+    fields = dict(
+        type="water",
+        location_kind="room",
+        number_words="تسعمية وسبعة",
+        location_number="907",
+        urgency="medium",
+        confidence="high",
+    )
+    fields.update(changes)
+    return Reading(**fields)
+
+
+# --- build_report: our own rules on top of what the model read -------------
+
+
+def test_a_clear_reading_becomes_a_report_that_needs_no_confirmation():
+    report = build_report(MESSAGE, reading())
+    assert (report.type, report.loc_kind, report.loc_number) == ("water", "room", "907")
+    assert report.urgency == "medium"
+    assert report.needs_confirmation is False
+    assert report.reasons == ()
+
+
+def test_owner_comes_from_the_routing_table_not_from_the_model():
+    assert build_report(MESSAGE, reading()).owner == "maintenance"
+    assert build_report(MESSAGE, reading(type="cleaning")).owner == "housekeeping"
+
+
+def test_deadline_comes_from_the_routing_table():
+    report = build_report(MESSAGE, reading(urgency="urgent"))
+    assert report.deadline_minutes == DEADLINE_MINUTES["urgent"]
+
+
+def test_number_is_stored_in_western_digits():
+    report = build_report(MESSAGE, reading(location_number="٩٠٧"))
+    assert report.loc_number == "907"
+    assert report.needs_confirmation is False
+
+
+def test_low_confidence_is_flagged():
+    report = build_report(MESSAGE, reading(confidence="low"))
+    assert report.needs_confirmation is True
+    assert report.reasons == ("low_confidence",)
+
+
+def test_unclear_type_is_flagged_and_goes_to_the_supervisor():
+    report = build_report(MESSAGE, reading(type="unclear"))
+    assert report.owner == "supervisor"
+    assert report.reasons == ("unclear_type",)
+
+
+def test_no_location_is_flagged():
+    report = build_report(
+        "المكيف خربان عند الحجاج الجدد",
+        reading(type="ac", location_kind="none", number_words="", location_number=""),
+    )
+    assert report.loc_number is None
+    assert report.reasons == ("no_location",)
+
+
+def test_a_room_without_its_number_counts_as_no_location():
+    report = build_report(
+        "في غرفة بالدور السابع ما فيها موية",
+        reading(number_words="", location_number=""),
+    )
+    assert report.loc_kind == "room"
+    assert report.loc_number is None
+    assert report.reasons == ("no_location",)
+
+
+def test_a_common_area_needs_no_number():
+    report = build_report(
+        "اللوبي يبغاله تنظيف",
+        reading(type="cleaning", location_kind="common_area", number_words="", location_number=""),
+    )
+    assert report.needs_confirmation is False
+
+
+def test_a_number_that_disagrees_with_its_own_quote_is_flagged():
+    report = build_report(MESSAGE, reading(location_number="970"))
+    assert report.loc_number == "970"  # we keep the model's reading, but ask a person
+    assert report.reasons == ("number_not_confirmed",)
+
+
+def test_a_quote_that_is_not_in_the_message_is_flagged():
+    report = build_report(MESSAGE, reading(number_words="تسعمية وسبعين", location_number="970"))
+    assert report.reasons == ("number_not_confirmed",)
+
+
+def test_a_quote_we_cannot_read_is_flagged():
+    message = "غرفة نمبر نو سو سات میں پانی نہیں ہے"
+    report = build_report(message, reading(number_words="نو سو سات"))
+    assert report.reasons == ("number_not_confirmed",)
+
+
+def test_a_number_that_is_not_digits_is_flagged():
+    report = build_report(MESSAGE, reading(location_number="تسعمية وسبعة"))
+    assert report.reasons == ("number_not_confirmed",)
+
+
+def test_an_elevator_named_by_an_ordinal_word_is_confirmed():
+    report = build_report(
+        "المصعد السابع واقف",
+        reading(type="power_elevator", location_kind="elevator", number_words="السابع", location_number="7"),
+    )
+    assert (report.loc_kind, report.loc_number) == ("elevator", "7")
+    assert report.needs_confirmation is False
+
+
+def test_several_reasons_are_all_listed():
+    report = build_report(MESSAGE, reading(type="unclear", confidence="low"))
+    assert set(report.reasons) == {"unclear_type", "low_confidence"}
+
+
+def test_every_reason_has_an_arabic_label():
+    report = build_report(MESSAGE, reading(type="unclear", confidence="low", location_number="970"))
+    assert all(reason in FLAG_REASONS for reason in report.reasons)
+
+
+# --- understand: the call to the model ------------------------------------
+# These tests use the real Anthropic client. Only the network is replaced: each
+# test supplies the HTTP answer that the API would have sent.
+
+
+def client_answering(handler) -> anthropic.Anthropic:
+    """A real client whose HTTP requests are answered by handler(request) instead of the internet."""
+    return anthropic.Anthropic(
+        api_key="test-key",
+        max_retries=0,
+        http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(handler)),
+    )
+
+
+def api_message(content, stop_reason="end_turn", input_tokens=900, output_tokens=120) -> httpx2.Response:
+    """The JSON the Messages API sends back."""
+    return httpx2.Response(
+        200,
+        json={
+            "id": "msg_test",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-haiku-5-5",
+            "content": content,
+            "stop_reason": stop_reason,
+            "stop_sequence": None,
+            "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+        },
+    )
+
+
+def text_block(text: str) -> dict:
+    return {"type": "text", "text": text}
+
+
+GOOD_ANSWER = text_block(reading().model_dump_json())
+
+
+def test_understand_sends_the_message_the_prompt_and_the_schema_to_the_chosen_model():
+    sent = []
+
+    def handler(request):
+        sent.append(request)
+        return api_message([GOOD_ANSWER])
+
+    understand(MESSAGE, client_answering(handler), model="some-model")
+
+    body = json.loads(sent[0].content)
+    assert body["model"] == "some-model"
+    assert body["system"] == SYSTEM_PROMPT
+    assert body["messages"] == [{"role": "user", "content": MESSAGE}]
+    assert body["output_config"]["format"]["type"] == "json_schema"
+    assert body["output_config"]["effort"] == EFFORT
+    assert set(body["output_config"]["format"]["schema"]["properties"]) == set(Reading.model_fields)
+
+
+def test_understand_sends_the_key_it_was_given():
+    sent = []
+
+    def handler(request):
+        sent.append(request)
+        return api_message([GOOD_ANSWER])
+
+    understand(MESSAGE, client_answering(handler))
+    assert "test-key" in sent[0].headers.get("authorization", "") + sent[0].headers.get("x-api-key", "")
+
+
+def test_understand_returns_the_report_with_the_tokens_it_used():
+    client = client_answering(lambda request: api_message([GOOD_ANSWER], input_tokens=900, output_tokens=120))
+    report = understand(MESSAGE, client)
+    assert (report.type, report.loc_number, report.owner) == ("water", "907", "maintenance")
+    assert (report.input_tokens, report.output_tokens) == (900, 120)
+    assert report.error is None
+
+
+def test_understand_reads_the_answer_when_the_model_thinks_first():
+    thinking = {"type": "thinking", "thinking": "", "signature": "abc"}
+    client = client_answering(lambda request: api_message([thinking, GOOD_ANSWER]))
+    assert understand(MESSAGE, client).loc_number == "907"
+
+
+def assert_sent_to_supervisor(report):
+    assert report.type == "unclear"
+    assert report.loc_kind == "none"
+    assert report.owner == "supervisor"
+    assert report.needs_confirmation is True
+    assert report.reasons == ("not_understood",)
+    assert report.error
+
+
+def test_a_network_failure_gives_a_flagged_report_instead_of_a_crash():
+    def handler(request):
+        raise httpx2.ConnectError("no internet", request=request)
+
+    assert_sent_to_supervisor(understand(MESSAGE, client_answering(handler)))
+
+
+def test_a_rejected_key_gives_a_flagged_report_that_names_the_key():
+    error = {"type": "error", "error": {"type": "authentication_error", "message": "invalid x-api-key"}}
+    report = understand(MESSAGE, client_answering(lambda request: httpx2.Response(401, json=error)))
+    assert_sent_to_supervisor(report)
+    assert "RASD_CLAUDE_KEY" in report.error
+
+
+def test_an_overloaded_api_gives_a_flagged_report():
+    error = {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}}
+    report = understand(MESSAGE, client_answering(lambda request: httpx2.Response(529, json=error)))
+    assert_sent_to_supervisor(report)
+    assert "529" in report.error
+
+
+def test_a_refusal_in_plain_words_gives_a_flagged_report():
+    client = client_answering(lambda request: api_message([text_block("I cannot help with that.")], "refusal"))
+    assert_sent_to_supervisor(understand(MESSAGE, client))
+
+
+def test_a_refusal_with_no_text_gives_a_flagged_report_and_counts_its_tokens():
+    client = client_answering(lambda request: api_message([], "refusal", input_tokens=900, output_tokens=5))
+    report = understand(MESSAGE, client)
+    assert_sent_to_supervisor(report)
+    assert "refused" in report.error
+    assert (report.input_tokens, report.output_tokens) == (900, 5)
+
+
+def test_an_answer_cut_off_in_the_middle_gives_a_flagged_report():
+    half = text_block(reading().model_dump_json()[:40])
+    assert_sent_to_supervisor(understand(MESSAGE, client_answering(lambda request: api_message([half], "max_tokens"))))
+
+
+def test_a_reply_that_ran_out_of_tokens_while_thinking_gives_a_flagged_report():
+    thinking = {"type": "thinking", "thinking": "", "signature": "abc"}
+    client = client_answering(lambda request: api_message([thinking], "max_tokens"))
+    assert_sent_to_supervisor(understand(MESSAGE, client))
+
+
+def test_an_empty_message_is_flagged_without_calling_the_model():
+    def handler(request):
+        raise AssertionError("the model must not be called for an empty message")
+
+    assert_sent_to_supervisor(understand("   ", client_answering(handler)))
+
+
+# --- the prompt -----------------------------------------------------------
+
+
+def test_the_model_can_only_answer_with_codes_from_the_schema():
+    properties = Reading.model_json_schema()["properties"]
+    assert properties["type"]["enum"] == list(TYPES)
+    assert properties["location_kind"]["enum"] == list(LOCATION_KINDS)
+    assert properties["urgency"]["enum"] == list(URGENCIES)
+
+
+def test_the_prompt_explains_every_code():
+    for code in [*TYPES, *LOCATION_KINDS, *URGENCIES]:
+        assert code in SYSTEM_PROMPT, f"the prompt does not mention '{code}'"
+
+
+def test_the_prompt_does_not_contain_benchmark_room_numbers():
+    prompt = normalise(SYSTEM_PROMPT).split()
+    numbers = {e.loc_number for e in load_expected().values() if e.loc_number}
+    for report in load_reports():
+        numbers.update(word for word in normalise(report.text).split() if word.isdigit())
+    leaked = {n for n in numbers if len(n) >= 3 and n in prompt}
+    assert not leaked, f"benchmark room numbers used in the prompt: {leaked}"
+
+
+def test_the_prompt_does_not_quote_benchmark_reports():
+    prompt = f" {normalise(SYSTEM_PROMPT)} "
+    for report in load_reports():
+        words = normalise(report.text).split()
+        for i in range(len(words) - 2):
+            phrase = " ".join(words[i : i + 3])
+            assert f" {phrase} " not in prompt, f"report {report.id} is quoted in the prompt: {phrase}"
+
+
+# --- the key --------------------------------------------------------------
+
+
+def test_the_client_gets_the_key_from_the_environment_variable(monkeypatch, tmp_path):
+    monkeypatch.setenv("RASD_CLAUDE_KEY", "key-from-the-environment")
+    client = make_client(env_file=tmp_path / "no-such-file")
+    assert client.api_key == "key-from-the-environment"
+
+
+def test_the_client_gets_the_key_from_the_env_file_on_a_laptop(monkeypatch, tmp_path):
+    monkeypatch.delenv("RASD_CLAUDE_KEY", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text("RASD_CLAUDE_KEY=key-from-the-file\n", encoding="utf-8")
+    assert make_client(env_file=env_file).api_key == "key-from-the-file"
+    monkeypatch.delenv("RASD_CLAUDE_KEY", raising=False)  # load_dotenv wrote it into the environment
+
+
+def test_a_missing_key_is_reported_by_name(monkeypatch, tmp_path):
+    monkeypatch.delenv("RASD_CLAUDE_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="RASD_CLAUDE_KEY"):
+        make_client(env_file=tmp_path / "no-such-file")

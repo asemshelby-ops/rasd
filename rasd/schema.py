@@ -35,6 +35,20 @@ OWNERS = {
     "supervisor": "مشرف الوردية",
 }
 
+CONFIDENCES = {
+    "high": "عالية",
+    "low": "منخفضة",
+}
+
+# Why a report needs the supervisor to confirm it before it is trusted.
+FLAG_REASONS = {
+    "unclear_type": "نوع البلاغ غير واضح",
+    "no_location": "المكان غير مذكور أو رقمه ناقص",
+    "number_not_confirmed": "رقم المكان لم يتأكد آلياً",
+    "low_confidence": "ثقة النموذج في فهمه منخفضة",
+    "not_understood": "تعذّر فهم البلاغ آلياً",
+}
+
 
 def location_label(kind: str, number: str | None) -> str:
     """Arabic text for a location, for example 'غرفة 412' or 'غير مذكور'."""

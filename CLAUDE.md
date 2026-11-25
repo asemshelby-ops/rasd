@@ -11,7 +11,30 @@ for students to maintain.
 
 Phase 1, step 1 is done: `data/reports.csv` (35 fictional reports),
 `data/expected.csv` (expected answers), loader, routing table, checks.
-Next is step 2. Do not start Phase 2 until Phase 1 works and the owner says so.
+
+Step 2 is built and unit-tested, but **the benchmark has never run against the
+model, so there are no accuracy results yet.** On 25 November 2026 the value of
+`RASD_CLAUDE_KEY` in the cloud environment was an 8-character placeholder, not a
+key, and Anthropic answered 401. Built so far: `rasd/understand.py` (the
+understanding function and its prompt), `rasd/numbers.py` (dialect number
+parser), `rasd/scoring.py`, `rasd/cost.py` and `benchmark.py` (accuracy per
+field, Arabic and Urdu split, spoken-room accuracy, wrong reports, cost, time;
+duplicate grouping prints as "not built").
+
+Next: once the real key is set, run `python benchmark.py`, report the printed
+results exactly, and only then tune the prompt if the results call for it. The
+larger-model comparison has not been run. After that comes step 3.
+Do not start Phase 2 until Phase 1 works and the owner says so.
+
+Step 2 choices that the owner has not confirmed yet:
+
+- Confidence has two levels, `high` and `low`.
+- A room, elevator or floor without its number counts as "location missing".
+- A report the model could not read (API down, refusal, no answer) goes to the
+  supervisor as `unclear` and `urgent`, because nobody has read it yet.
+- The number parser covers Arabic only. A number spoken in Urdu words cannot be
+  re-read, so that report is flagged.
+- No refusal fallback to another model: a refusal becomes a flagged report.
 
 ## How to work
 
@@ -65,6 +88,11 @@ Next is step 2. Do not start Phase 2 until Phase 1 works and the owner says so.
   our own code re-reads that quote with a small dialect number parser; if the
   two disagree or the quote cannot be checked, the report is flagged. Report
   room accuracy for the `room_in_words` reports separately.
+- **How step 2 calls Claude:** SDK `anthropic` 2.x,
+  `client.messages.parse(output_format=Reading)` with `effort` set to `medium`
+  and thinking left on its default. Tests use the real SDK with only the network
+  replaced (`httpx2.MockTransport`), so they need no key and cost nothing.
+  Unit tests use made-up messages and room numbers, never the benchmark's.
 - **Urgency rule:** written in `README.md`; it is a first judgement that the
   team may change.
 - **Duplicate merging** (step 3): same type, same place, within a configurable
