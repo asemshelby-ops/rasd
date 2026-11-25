@@ -174,3 +174,6 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
   or the floor; a name-only reply does not run it. Tests: 893 passed. No API calls.
 - Then: the rule is now "any answer that fills in the hotel, the room, the
   floor or the type runs the duplicate check again". Tests: 899 passed. No API calls.
+- Design pass on the board and the phone page, to the owner's brief
+  (QUESTIONS.md 88 to 99). Screenshots in `screenshots/design/`. Tests: 924
+  passed. No API calls.

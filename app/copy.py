@@ -27,6 +27,19 @@ STATES = {
     "closed": "مغلقة",
 }
 NO_CASES = "لا حالات هنا الآن."
+# The board's layout: a band for critical cases, then three columns.
+SECTIONS = {"critical": "حالات حرجة", "now": "الآن", "late": "تجاوزت الموعد", "closed": "مغلقة"}
+NO_CRITICAL = "لا حالة حرجة الآن."
+COUNT_OPEN = "مفتوحة"
+COUNT_CRITICAL = "حرجة"
+COUNT_CLOSED_TODAY = "أُغلقت اليوم"
+WAITS_FOR_SUPERVISOR = "بانتظار المشرف"
+LANGUAGES = {"ar": "العربية", "ur": "الأردية", "en": "الإنجليزية"}
+BOARD_NAME_SAVE = "احفظ الاسم"
+BOARD_NAME_TITLE = "من يعمل على اللوحة"
+BOARD_NAME_NOW = "الاسم المسجَّل الآن"
+BOARD_NAME_NONE = "لا اسم بعد. أزرار اللوحة لا تعمل قبل حفظ الاسم."
+BOARD_SIZE_TITLE = "حجم الخط على اللوحة"
 STILL_WAITING = "ما زالت بانتظار تأكيد المشرف"
 
 # --- the PIN of the operator page and the supervisor page -------------------------------------
@@ -46,7 +59,7 @@ ACKNOWLEDGE = "استلمتُ الحالة"
 CLOSE = "أغلق الحالة"
 CONFIRM = "أكّد البلاغ"
 YOUR_NAME = "اسمك (يُسجَّل مع كل استلام وإغلاق)"
-NAME_NEEDED = "اكتب اسمك أولاً. الإغلاق يُسجَّل باسم من أغلق."
+NAME_NEEDED = "اكتب اسمك في صفحة التشغيل أولاً. الاستلام والإغلاق يُسجَّلان باسم من قام بهما."
 ALREADY_CLOSED = "هذه الحالة مغلقة من قبل."
 NOT_FOUND = "هذه الحالة غير موجودة."
 ACKNOWLEDGE_WITHIN = "الاستلام خلال"

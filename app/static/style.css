@@ -1,142 +1,214 @@
-/* Rasd pages. Arabic, right to left. The board is read from the back of a hall:
-   large type, strong contrast, and priority is always written in words, never colour alone. */
+@font-face { font-family: "IBM Plex Sans Arabic"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/static/fonts/ibm-plex-sans-arabic-arabic-400-normal.woff2") format("woff2"); unicode-range: U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC,U+102E0-102FB,U+10E60-10E7E,U+10EC2-10EC4,U+10EFC-10EFF,U+1EE00-1EE03,U+1EE05-1EE1F,U+1EE21-1EE22,U+1EE24,U+1EE27,U+1EE29-1EE32,U+1EE34-1EE37,U+1EE39,U+1EE3B,U+1EE42,U+1EE47,U+1EE49,U+1EE4B,U+1EE4D-1EE4F,U+1EE51-1EE52,U+1EE54,U+1EE57,U+1EE59,U+1EE5B,U+1EE5D,U+1EE5F,U+1EE61-1EE62,U+1EE64,U+1EE67-1EE6A,U+1EE6C-1EE72,U+1EE74-1EE77,U+1EE79-1EE7C,U+1EE7E,U+1EE80-1EE89,U+1EE8B-1EE9B,U+1EEA1-1EEA3,U+1EEA5-1EEA9,U+1EEAB-1EEBB,U+1EEF0-1EEF1; }
+@font-face { font-family: "IBM Plex Sans Arabic"; font-style: normal; font-weight: 500; font-display: swap;
+  src: url("/static/fonts/ibm-plex-sans-arabic-arabic-500-normal.woff2") format("woff2"); unicode-range: U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC,U+102E0-102FB,U+10E60-10E7E,U+10EC2-10EC4,U+10EFC-10EFF,U+1EE00-1EE03,U+1EE05-1EE1F,U+1EE21-1EE22,U+1EE24,U+1EE27,U+1EE29-1EE32,U+1EE34-1EE37,U+1EE39,U+1EE3B,U+1EE42,U+1EE47,U+1EE49,U+1EE4B,U+1EE4D-1EE4F,U+1EE51-1EE52,U+1EE54,U+1EE57,U+1EE59,U+1EE5B,U+1EE5D,U+1EE5F,U+1EE61-1EE62,U+1EE64,U+1EE67-1EE6A,U+1EE6C-1EE72,U+1EE74-1EE77,U+1EE79-1EE7C,U+1EE7E,U+1EE80-1EE89,U+1EE8B-1EE9B,U+1EEA1-1EEA3,U+1EEA5-1EEA9,U+1EEAB-1EEBB,U+1EEF0-1EEF1; }
+@font-face { font-family: "IBM Plex Sans Arabic"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("/static/fonts/ibm-plex-sans-arabic-arabic-700-normal.woff2") format("woff2"); unicode-range: U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC,U+102E0-102FB,U+10E60-10E7E,U+10EC2-10EC4,U+10EFC-10EFF,U+1EE00-1EE03,U+1EE05-1EE1F,U+1EE21-1EE22,U+1EE24,U+1EE27,U+1EE29-1EE32,U+1EE34-1EE37,U+1EE39,U+1EE3B,U+1EE42,U+1EE47,U+1EE49,U+1EE4B,U+1EE4D-1EE4F,U+1EE51-1EE52,U+1EE54,U+1EE57,U+1EE59,U+1EE5B,U+1EE5D,U+1EE5F,U+1EE61-1EE62,U+1EE64,U+1EE67-1EE6A,U+1EE6C-1EE72,U+1EE74-1EE77,U+1EE79-1EE7C,U+1EE7E,U+1EE80-1EE89,U+1EE8B-1EE9B,U+1EEA1-1EEA3,U+1EEA5-1EEA9,U+1EEAB-1EEBB,U+1EEF0-1EEF1; }
+@font-face { font-family: "IBM Plex Sans Arabic"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/static/fonts/ibm-plex-sans-arabic-latin-400-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Sans Arabic"; font-style: normal; font-weight: 500; font-display: swap;
+  src: url("/static/fonts/ibm-plex-sans-arabic-latin-500-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Sans Arabic"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("/static/fonts/ibm-plex-sans-arabic-latin-700-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+
+/* Rasd: one stylesheet for every page. Arabic, right to left.
+   The look follows the owner's design brief (26 November 2026):
+   a calm operations room until something is critical, then impossible to miss.
+   One meaning per colour. Priority is always written in words too, never colour alone. */
 :root {
-  --ink: #14181f; --paper: #f6f4ef; --card: #ffffff; --line: #5b6470; --muted: #3d4651;
-  --critical: #8b0f0f; --urgent: #8a3b00; --medium: #174a86; --normal: #33383f; --focus: #0b57d0;
-  --ok: #155d2b; --warn-bg: #fff1c2;
+  --bg: #EEF2F1;        /* cool marble white */
+  --card: #FFFFFF;
+  --text: #10202B;
+  --muted: #4A5A66;
+  --line: #D5DDDB;
+  --critical: #B3261E;  /* critical, and nothing else */
+  --urgent: #B26A00;    /* urgent. With white text it is used at large sizes only */
+  --medium: #1F6F78;
+  --normal: #5B6770;
+  --done: #0B6E4F;      /* merged, or closed */
+  --font: "IBM Plex Sans Arabic", sans-serif;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; } /* a class that sets display must not un-hide a hidden element */
 html { font-size: 18px; }
-body { margin: 0; background: var(--paper); color: var(--ink); line-height: 1.6;
-  font-family: "Noto Kufi Arabic", "Segoe UI", Tahoma, "Geeza Pro", Arial, sans-serif; }
-a { color: var(--focus); }
-:focus-visible { outline: 4px solid var(--focus); outline-offset: 3px; }
+body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.6; font-family: var(--font); }
+button, input, select, textarea { font: inherit; color: var(--text); }
+a { color: var(--text); }
+:focus-visible { outline: 4px solid var(--text); outline-offset: 3px; }
 .skip { position: absolute; inset-inline-start: -999rem; }
 .skip:focus { inset-inline-start: 1rem; top: 1rem; background: var(--card); padding: .5rem 1rem; z-index: 10; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.top { display: flex; gap: 1.5rem; align-items: center; padding: .6rem 1.2rem; background: var(--ink); color: #fff; flex-wrap: wrap; }
-.top a { color: #fff; margin-inline-end: .4rem; padding: .55rem .5rem; display: inline-block; }
-.top a:focus-visible { outline-color: #ffd28a; } /* the blue ring does not show on the dark bar */
-.brand { font-size: 1.4rem; }
+.top { display: flex; gap: 1.5rem; align-items: center; padding: .5rem 1.2rem; background: var(--card); border-bottom: 2px solid var(--line); flex-wrap: wrap; }
+.top a { padding: .5rem; display: inline-block; }
+.brand { font-size: 1.5rem; font-weight: 700; }
 main { padding: 1rem 1.2rem 3rem; }
 h1 { font-size: 1.8rem; margin: .4rem 0; }
 h2 { font-size: 1.3rem; margin: .8rem 0 .5rem; }
 h3 { font-size: 1.15rem; margin: 0; }
 .lead { font-size: 1.15rem; }
-.note, .case-note { color: var(--muted); font-size: .95rem; margin: .2rem 0; }
+.note, .case-note { color: var(--muted); margin: .2rem 0; }
 .links { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .8rem; }
-button, .button, .file-button { font: inherit; font-weight: 700; min-height: 48px; padding: .5rem 1.1rem; border-radius: 10px;
-  border: 2px solid var(--ink); background: var(--card); color: var(--ink); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
-button.primary, button.close { background: var(--ink); color: #fff; }
+button, .button, .file-button { font-weight: 700; min-height: 48px; padding: .5rem 1.1rem; border-radius: 10px;
+  border: 2px solid var(--text); background: var(--card); color: var(--text); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+button.primary, button.close { background: var(--text); color: #FFFFFF; }
 button:disabled { opacity: .6; cursor: progress; }
 .file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.file-button:focus-within { outline: 4px solid var(--focus); outline-offset: 3px; }
-.tag, .banner, .corner-label { font-weight: 700; background: var(--warn-bg); color: var(--ink); border: 2px solid var(--ink); border-radius: 8px; padding: .15rem .6rem; display: inline-block; }
+.file-button:focus-within { outline: 4px solid var(--text); outline-offset: 3px; }
+::placeholder { color: var(--muted); opacity: 1; }
+input[type=text], input[type=password], select, textarea { padding: .4rem .6rem; min-height: 48px; border: 2px solid var(--text); border-radius: 10px; background: var(--card); }
+/* A label that says "this part is not live or not real". Text colour on white: no meaning colour is used for it. */
+.tag, .banner, .corner-label { font-weight: 700; background: var(--card); color: var(--text); border: 2px solid var(--text); border-radius: 8px; padding: .1rem .6rem; display: inline-block; }
 .banner { display: block; text-align: center; font-size: 1.2rem; padding: .6rem; position: sticky; top: 0; z-index: 5; }
-.corner-label { position: fixed; top: 3.4rem; inset-inline-end: .6rem; font-size: .8rem; z-index: 6; max-width: 60vw; }
-.message { background: var(--warn-bg); border: 2px solid var(--ink); border-radius: 10px; padding: .6rem .9rem; font-weight: 700; }
-.empty { color: var(--muted); }
+.message { background: var(--card); border: 2px solid var(--text); border-inline-start-width: 10px; border-radius: 10px; padding: .6rem .9rem; font-weight: 700; }
+.empty { color: var(--muted); margin: .2rem 0; }
 
-/* --- the board --- */
-/* All sizes on the board are in rem, so one number scales the whole board with the screen.
-   The operator can scale it further for the hall with the two size buttons (--board-scale). */
-html.board-root { font-size: calc(clamp(18px, 1.3vw, 40px) * var(--board-scale, 1)); }
-.board-top { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
-.board-tools { margin-inline-start: auto; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-size: .8rem; }
-.board-tools button { font-size: .8rem; min-height: 44px; }
-.who { font-weight: 700; }
-input[type=text], select, textarea { font: inherit; padding: .4rem .6rem; min-height: 44px; border: 2px solid var(--ink); border-radius: 8px; background: #fff; color: var(--ink); }
-.board-tools input { width: 11rem; }
-.columns { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; align-items: start; }
-.column { background: #e9e5db; border-radius: 12px; padding: .6rem; min-height: 8rem; }
-.column h2 { display: flex; justify-content: space-between; margin: 0 0 .5rem; }
-.count { background: var(--ink); color: #fff; border-radius: 999px; padding: 0 .7rem; }
-.case { background: var(--card); border: 2px solid var(--line); border-inline-start: 14px solid var(--normal); border-radius: 12px; padding: .6rem .8rem; margin-bottom: .7rem; }
-.case.priority-critical { border-inline-start-color: var(--critical); border-inline-start-style: double; border-inline-start-width: 18px; }
-.case.priority-urgent { border-inline-start-color: var(--urgent); }
-.case.priority-medium { border-inline-start-color: var(--medium); border-inline-start-style: dashed; }
-.case.priority-normal { border-inline-start-color: var(--normal); border-inline-start-style: dotted; }
+/* --- priority: the same four classes on every page --- */
+/* White on the urgent colour is 4.2 to 1: enough for large bold text only, so a badge is never smaller than 20px bold. */
+.badge, .chip { color: #FFFFFF; font-weight: 700; font-size: max(1.15rem, 20px); border-radius: 8px; padding: .05rem .8rem; display: inline-block; }
+.badge-critical, .chip-critical { background: var(--critical); }
+.badge-urgent, .chip-urgent { background: var(--urgent); }
+.badge-medium, .chip-medium { background: var(--medium); }
+.badge-normal, .chip-normal { background: var(--normal); }
+/* The priority colour is a thick border on the LEFT of the card, as the brief asks. */
+.case { background: var(--card); border: 2px solid var(--line); border-left: 10px solid var(--normal); border-radius: 12px; padding: .7rem 1rem; margin-bottom: .8rem; }
+.case.priority-critical { border-left: 18px solid var(--critical); }
+.case.priority-urgent { border-left-color: var(--urgent); }
+.case.priority-medium { border-left-color: var(--medium); }
+.case.priority-normal { border-left-color: var(--normal); }
 .case-head { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
-.chip { color: #fff; font-weight: 700; font-size: 1.25rem; border-radius: 8px; padding: .05rem .7rem; }
-.chip-critical { background: var(--critical); } .chip-critical::before { content: "‼ "; }
-.chip-urgent { background: var(--urgent); } .chip-urgent::before { content: "! "; }
-.chip-medium { background: var(--medium); }
-.chip-normal { background: var(--normal); }
-.case-type { font-size: 1.45rem; font-weight: 700; margin: .3rem 0 0; line-height: 1.35; }
-.case-place, .case-owner, .case-count, .case-identified, .case-closed { margin: .15rem 0; }
-.case-place { font-size: 1.2rem; }
-.case-owner, .case-identified, .case-closed { font-size: .95rem; }
-.case-count { font-weight: 700; font-size: 1.25rem; color: var(--ok); }
-.case-identified { border-top: 2px dashed var(--line); padding-top: .3rem; }
-.clock { margin: .2rem 0; display: flex; justify-content: space-between; gap: .5rem; }
-.countdown { font-variant-numeric: tabular-nums; font-size: 1.5rem; direction: ltr; unicode-bidi: isolate; }
-.countdown.late { color: var(--critical); }
-.actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
-.notifications { margin-top: 1rem; background: var(--card); border: 2px solid var(--line); border-radius: 12px; padding: .6rem .9rem; }
-.notification { font-size: 1.1rem; margin: .3rem 0; }
+.case-type { font-weight: 700; margin: .3rem 0 0; line-height: 1.3; }
+.case-place, .case-owner, .case-identified, .case-closed { margin: .15rem 0; }
+.case-owner, .case-identified, .case-closed { color: var(--muted); }
+.case-identified { border-top: 2px solid var(--line); padding-top: .3rem; }
+.countdown { font-variant-numeric: tabular-nums; font-weight: 700; direction: ltr; unicode-bidi: isolate; }
+/* Overdue is not a priority, so it takes no priority colour: the clock turns dark and says "تأخرت". */
+.countdown.late { background: var(--text); color: #FFFFFF; border-radius: 8px; padding: 0 .5rem; }
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
 
-/* --- the reporting page: a chat --- */
-.report-page main { max-width: 42rem; margin: 0 auto; }
-.sending-from { display: block; margin: .4rem 0; font-weight: 700; }
-.chat { list-style: none; padding: 0; margin: .8rem 0; display: flex; flex-direction: column; gap: .5rem; min-height: 8rem; }
-.bubble { max-width: 88%; padding: .5rem .8rem; border-radius: 14px; border: 2px solid var(--line); background: var(--card); overflow-wrap: anywhere; }
+/* --- the board. Its sizes are the brief's sizes at scale 1; the operator page scales them for the hall. --- */
+html.board-root { font-size: calc(16px * var(--board-scale, 1)); }
+.board-page main { padding: 0 1.5rem 2rem; }
+.board-head { display: flex; align-items: center; gap: 2.5rem; padding: .8rem 0; border-bottom: 2px solid var(--line); margin-bottom: 1rem; }
+.board-head .brand { font-size: 2.25rem; }
+.clock-now { font-size: 2.25rem; font-weight: 500; font-variant-numeric: tabular-nums; direction: ltr; }
+.counts { display: flex; gap: 2.5rem; margin: 0; margin-inline-start: auto; }
+.counts div { display: flex; align-items: baseline; gap: .6rem; }
+.counts dt { font-size: 1.25rem; color: var(--muted); }
+.counts dd { margin: 0; font-size: 2.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.counts .count-critical dd { color: var(--critical); }
+.board h2 { font-size: 1.5rem; margin: 0 0 .6rem; display: flex; gap: .8rem; align-items: baseline; }
+.board h2 .count { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.band { margin-bottom: 1.2rem; }
+.band-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(44rem, 1fr)); gap: 1rem; }
+.columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; align-items: start; }
+.board .case-type { font-size: 1.875rem; }            /* 30px bold */
+.board .case-place { font-size: 1.375rem; }           /* 22px */
+.board .case-owner, .board .case-identified, .board .case-closed, .board .case-note { font-size: 1.125rem; }
+.board .badge { font-size: 1.5rem; }
+.board .case-label { font-size: 1.25rem; color: var(--muted); font-weight: 500; }
+.board .tag { font-size: 1.125rem; }
+.clocks { display: flex; gap: 2rem; margin-top: .5rem; flex-wrap: wrap; }
+.clock { margin: 0; display: flex; flex-direction: column; }
+.clock span { font-size: 1.125rem; color: var(--muted); }
+.board .countdown { font-size: 2.5rem; line-height: 1.2; }  /* 40px, tabular digits */
+.board .case.big { padding: 1rem 1.4rem; border-width: 3px; border-left-width: 26px; }
+.board .case.big .case-type { font-size: 2.5rem; }
+.board .case.big .case-place { font-size: 1.75rem; }
+.board .case.big .countdown { font-size: 3.25rem; }
+.board .actions button { min-height: 48px; font-size: 1.125rem; }
+/* The merge moment: a stamp, and one pulse when the second report joins. The only animation on the page. */
+.stamp { display: inline-flex; align-items: center; gap: .7rem; flex-wrap: wrap; margin: .5rem 0 .2rem; padding: .2rem .9rem;
+  border: 4px solid var(--done); border-radius: 12px; color: var(--done); font-weight: 700; font-size: 2rem; line-height: 1.4; }
+.language-chip { background: var(--done); color: #FFFFFF; border-radius: 999px; padding: 0 .8rem; font-size: 1.125rem; font-weight: 500; }
+.case-closed b { color: var(--done); }
+@keyframes merged { 0% { box-shadow: 0 0 0 0 var(--done); } 60% { box-shadow: 0 0 0 1.2rem transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.case.just-merged { animation: merged 1s ease-out 1; }
+@media (prefers-reduced-motion: reduce) { .case.just-merged { animation: none; } }
+.replay-corner { position: fixed; bottom: .8rem; inset-inline-start: .8rem; z-index: 6; margin: 0; font-size: 1.125rem; font-weight: 700;
+  background: var(--text); color: #FFFFFF; border-radius: 8px; padding: .2rem .8rem; }
+.trial-corner { position: fixed; bottom: .8rem; inset-inline-end: .8rem; z-index: 6; margin: 0; font-size: 1rem; color: var(--muted); background: var(--bg); border: 1px solid var(--muted); border-radius: 8px; padding: .1rem .7rem; }
+.notifications { margin-top: 1.2rem; border-top: 2px solid var(--line); padding-top: .6rem; }
+.notification { font-size: 1.25rem; margin: .3rem 0; }
+
+/* --- the phone report page: a messaging app --- */
+.report-page { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+.report-page main { flex: 1; min-height: 0; padding: 0; display: flex; flex-direction: column; max-width: 44rem; width: 100%; margin: 0 auto; }
+.chat-top { background: var(--card); border-bottom: 2px solid var(--line); padding: .5rem .8rem; }
+.chat-top-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.chat-top .brand { font-size: 1.3rem; }
+.chat-top label { font-weight: 700; }
+.chat-top select { min-height: 44px; flex: 1; min-width: 9rem; }
+.corner-label { font-size: 16px; font-weight: 500; margin: .4rem 0 0; border-width: 1px; border-color: var(--muted); color: var(--muted); display: block; text-align: center; }
+.chat { list-style: none; padding: .8rem; margin: 0; display: flex; flex-direction: column; gap: .5rem; flex: 1; overflow-y: auto; }
+.bubble { max-width: 86%; padding: .5rem .8rem; border-radius: 16px; border: 1px solid var(--line); background: var(--card); overflow-wrap: anywhere; }
 #chat .bubble { white-space: pre-wrap; }
 .bubble .words { display: block; white-space: pre-wrap; }
-.bubble.mine { align-self: flex-start; background: #dff3d8; }
-.bubble.theirs { align-self: flex-end; }
-.bubble .sender { display: block; font-weight: 700; font-size: .9rem; }
-.bubble time { display: block; font-size: .8rem; color: var(--muted); }
+.bubble.mine { align-self: flex-start; background: var(--text); color: #FFFFFF; border-color: var(--text); border-end-start-radius: 4px; }
+.bubble.theirs { align-self: flex-end; border-end-end-radius: 4px; }
+.bubble .sender { display: block; font-weight: 700; }
+.bubble time { display: block; color: var(--muted); }
 .bubble .options { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
-.composer textarea { width: 100%; }
-.composer-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
-.photo-box { display: block; background: #d7dbe0; border: 2px dashed var(--line); border-radius: 8px; padding: 1.2rem .6rem; text-align: center; margin: .3rem 0; }
+.report-page .message { margin: 0 .8rem .4rem; }
+.resend-row { margin: 0 .8rem .4rem; }
+.composer { background: var(--card); border-top: 2px solid var(--line); padding: .6rem .8rem .8rem; }
+.composer-row { display: flex; gap: .5rem; align-items: flex-end; }
+.composer textarea { flex: 1; min-height: 48px; resize: none; }
+.record-row { display: flex; flex-direction: column; align-items: center; margin-top: .6rem; }
+button.record-main { width: 76px; height: 76px; min-height: 76px; border-radius: 50%; padding: 0; justify-content: center; background: var(--text); color: #FFFFFF; border: 4px solid var(--text); }
+button.record-main svg { width: 34px; height: 34px; fill: currentColor; }
+button.record-main.recording { background: var(--card); color: var(--text); }
+.record-caption { font-weight: 700; margin: .3rem 0 0; }
+.attach-row { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; margin-top: .6rem; }
+.attach-row .file-button { min-height: 44px; font-weight: 500; border-width: 1px; padding: .3rem .8rem; }
+.composer .note { text-align: center; margin: .4rem 0 0; }
+.photo-box { display: block; background: var(--bg); border: 2px dashed var(--muted); border-radius: 8px; padding: 1.2rem .6rem; text-align: center; margin: .3rem 0; }
 
 /* --- the Elm view and the before-and-after page --- */
 table.elm { border-collapse: collapse; width: 100%; background: var(--card); font-size: 1.1rem; }
 table.elm caption { text-align: start; padding: .4rem 0; color: var(--muted); }
 table.elm th, table.elm td { border: 2px solid var(--line); padding: .5rem .8rem; text-align: start; }
-table.elm th { background: var(--ink); color: #fff; }
+table.elm thead th { background: var(--text); color: #FFFFFF; }
+table.elm .countdown { font-size: 1.3rem; }
 .mockup-grid, .before-after { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; align-items: start; }
-.mockup-page main { background: repeating-linear-gradient(135deg, transparent 0 60px, rgba(0,0,0,.03) 60px 120px); }
-.before, .after { background: #e9e5db; border-radius: 12px; padding: .8rem; }
+.before, .after { border: 2px solid var(--line); border-radius: 12px; padding: .8rem; }
+.group-chat { overflow: visible; }
 .group-chat .bubble { max-width: 100%; }
+.after .case-type { font-size: 1.2rem; }
 
-@media (max-width: 900px) {
-  .columns, .mockup-grid, .before-after { grid-template-columns: 1fr; }
-  .corner-label { position: static; display: block; margin-bottom: .4rem; max-width: none; }
-}
-@media (prefers-reduced-motion: no-preference) { .case { transition: border-color .2s; } }
-
-/* --- the operator page: large buttons for a phone held in one hand --- */
+/* --- the operator page, the supervisor page, the PIN page --- */
 .operator-page main { max-width: 40rem; margin: 0 auto; }
 .panel { background: var(--card); border: 2px solid var(--line); border-radius: 12px; padding: .8rem 1rem; margin: 1rem 0; }
 .panel form { margin: .5rem 0; }
-.panel.mode-replay { border-color: var(--urgent); border-width: 4px; background: var(--warn-bg); }
+.panel.mode-replay { border-color: var(--text); border-width: 4px; }
+.panel .row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
 button.big { width: 100%; min-height: 64px; font-size: 1.15rem; justify-content: center; }
 .measured { font-size: 2rem; margin: 0; }
 .checks { list-style: none; padding: 0; margin: 0; }
 .checks li { padding: .3rem 0; font-weight: 700; }
-.check-ok { color: var(--ok); }
+.check-ok { color: var(--done); }
 .check-missing { color: var(--critical); }
 .confirm { display: block; margin: .5rem 0; font-weight: 700; }
 .confirm input { width: 1.4rem; height: 1.4rem; vertical-align: middle; }
-.replay-banner { position: static; margin-bottom: .6rem; }
 
 /* --- the scenario card: printed and held in the hand --- */
 .card-page main { max-width: 46rem; margin: 0 auto; }
 .steps { padding-inline-start: 1.6rem; }
 .steps li { margin-bottom: .9rem; break-inside: avoid; }
 .steps h2, .fallback h2, .honest h2 { font-size: 1rem; margin: .4rem 0 .1rem; color: var(--muted); }
-.say { font-size: 1.15rem; font-weight: 700; margin: .2rem 0; border-inline-start: 6px solid var(--ink); padding-inline-start: .7rem; }
+.say { font-size: 1.15rem; font-weight: 700; margin: .2rem 0; border-inline-start: 6px solid var(--text); padding-inline-start: .7rem; }
 .do { margin: .2rem 0; }
-.fallback, .honest { border: 2px solid var(--ink); border-radius: 10px; padding: .5rem .9rem; margin: 1rem 0; break-inside: avoid; }
-.fallback { background: var(--warn-bg); }
+.fallback, .honest { border: 2px solid var(--text); border-radius: 10px; padding: .5rem .9rem; margin: 1rem 0; break-inside: avoid; background: var(--card); }
+
+@media (max-width: 900px) {
+  .columns, .mockup-grid, .before-after { grid-template-columns: 1fr; }
+  .band-cards { grid-template-columns: 1fr; }
+  .board-head, .counts { flex-wrap: wrap; gap: 1rem; }
+}
 @media print {
   /* One A4 sheet: the card is held in one hand. */
   @page { size: A4; margin: 11mm; }
   .top, .skip, .no-print { display: none; }
-  body { background: #fff; line-height: 1.4; }
+  body { background: #FFFFFF; line-height: 1.4; }
   html { font-size: 9.5pt; }
   main { padding: 0; }
   h1 { font-size: 1.4rem; margin: 0 0 .2rem; }
@@ -145,5 +217,5 @@ button.big { width: 100%; min-height: 64px; font-size: 1.15rem; justify-content:
   .steps h2, .fallback h2, .honest h2 { margin: .15rem 0 0; }
   .say { font-size: 1.05rem; margin: .1rem 0; }
   .do, .note { margin: .1rem 0; }
-  .fallback, .honest { background: #fff; padding: .3rem .7rem; margin: .4rem 0; }
+  .fallback, .honest { padding: .3rem .7rem; margin: .4rem 0; }
 }

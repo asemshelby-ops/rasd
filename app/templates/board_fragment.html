@@ -1,45 +1,69 @@
-{% if replay_mode %}<p class="banner replay-banner" role="note">{{ copy.REPLAY_MODE_ON }}</p>{% endif %}
-<div class="columns" data-now="{{ now }}">
-{% for state, title in copy.STATES.items() %}
-  <section class="column column-{{ state }}" aria-labelledby="column-{{ state }}">
-    <h2 id="column-{{ state }}">{{ title }} <span class="count"><span class="visually-hidden">{{ copy.CASES_COUNT }}: </span>{{ columns[state] | length }}</span></h2>
-    {% for case in columns[state] %}
-    <article class="case priority-{{ case.priority }}" data-case="{{ case.id }}" data-state="{{ case.state }}" data-state-label="{{ case.state_label }}" aria-label="{{ case.label }}، {{ case.type }}، الأولوية {{ case.priority_label }}">
-      <header class="case-head">
-        <span class="chip chip-{{ case.priority }}">{{ case.priority_label }}</span>
-        <h3>{{ case.label }}</h3>
-      </header>
-      <p class="case-type">{{ case.type }}</p>
-      <p class="case-place">{{ case.place }}</p>
-      <p class="case-owner">إلى: {{ case.owner }}</p>
-      {% if case.count > 1 %}<p class="case-count">{{ case.count_text }}</p>{% endif %}
-      {% if case.waiting and case.state == "late" %}<p class="case-note"><span class="tag">{{ copy.STILL_WAITING }}</span></p>{% endif %}
-      {% if case.from_saved %}<p class="case-note"><span class="tag">{{ copy.FROM_SAVED }}</span></p>{% endif %}
-      {% if case.photo_attached %}<p class="case-note">{{ copy.PHOTO_ATTACHED }}</p>{% endif %}
-      {% if case.identified_text %}<p class="case-identified">{{ case.identified_text }}</p>{% endif %}
-      {% if case.state == "closed" %}
-        <p class="case-closed">{{ copy.CLOSED_BY }} {{ case.closed_by }}، <time datetime="{{ case.closed_at }}">{{ case.closed_at[11:16] }}</time></p>
-      {% else %}
-        {% if case.acknowledge_due and not case.acknowledged %}
-          <p class="clock"><span>{{ copy.ACKNOWLEDGE_WITHIN }}</span> <b class="countdown" data-due="{{ case.acknowledge_due }}" data-late="{{ copy.LATE_BY }}">--:--</b></p>
-        {% elif case.acknowledged %}
-          <p class="case-note">{{ copy.ACKNOWLEDGED }}</p>
-        {% endif %}
-        <p class="clock"><span>{{ copy.CLOSE_WITHIN }}</span> <b class="countdown" data-due="{{ case.close_due }}" data-late="{{ copy.LATE_BY }}">--:--</b></p>
-        {% if case.replacement_due %}
-          <p class="clock replacement"><span>{{ copy.REPLACEMENT }}: {{ copy.REPLACEMENT_WITHIN }}</span> <b class="countdown" data-due="{{ case.replacement_due }}" data-late="{{ copy.LATE_BY }}">--:--</b></p>
-          <p class="case-note"><a href="/cases/{{ case.id }}/replacement">{{ copy.OPEN_REQUEST }}</a></p>
-        {% endif %}
-        <div class="actions">
-          {% if case.waiting %}<button type="button" data-action="confirm" data-case="{{ case.id }}">{{ copy.CONFIRM }}</button>{% endif %}
-          {% if case.acknowledge_due and not case.acknowledged %}<button type="button" data-action="acknowledge" data-case="{{ case.id }}">{{ copy.ACKNOWLEDGE }}</button>{% endif %}
-          <button type="button" class="close" data-action="close" data-case="{{ case.id }}">{{ copy.CLOSE }}</button>
-        </div>
-      {% endif %}
-    </article>
-    {% else %}
-    <p class="empty">{{ copy.NO_CASES }}</p>
-    {% endfor %}
+{# One card. large: the bigger card of the critical band. Nothing private is in a case: see Store.board. #}
+{% macro card(case, large=False) %}
+<article class="case priority-{{ case.priority }}{{ " big" if large }}" data-case="{{ case.id }}" data-state="{{ case.state }}" data-state-label="{{ case.state_label }}" data-count="{{ case.count }}" aria-label="{{ case.label }}، {{ case.type }}، الأولوية {{ case.priority_label }}">
+  <header class="case-head">
+    <span class="badge badge-{{ case.priority }}">{{ case.priority_label }}</span>
+    <span class="case-label">{{ case.label }}</span>
+    {% if case.waiting %}<span class="tag">{{ copy.STILL_WAITING if case.state == "late" else copy.WAITS_FOR_SUPERVISOR }}</span>{% endif %}
+    {% if case.from_saved %}<span class="tag">{{ copy.FROM_SAVED }}</span>{% endif %}
+  </header>
+  <h3 class="case-type">{{ case.type }}</h3>
+  <p class="case-place">{{ case.place }}</p>
+  <p class="case-owner">إلى: {{ case.owner }}</p>
+  {% if case.count > 1 %}
+  <p class="stamp">{{ case.count_text }}{% for language in case.languages %} <span class="language-chip">{{ language }}</span>{% endfor %}</p>
+  {% endif %}
+  {% if case.photo_attached %}<p class="case-note">{{ copy.PHOTO_ATTACHED }}</p>{% endif %}
+  {% if case.identified_text %}<p class="case-identified">{{ case.identified_text }}</p>{% endif %}
+  {% if case.state == "closed" %}
+  <p class="case-closed"><b>{{ copy.CLOSED_BY }} {{ case.closed_by }}</b>، <time datetime="{{ case.closed_at }}">{{ case.closed_at[11:16] }}</time></p>
+  {% else %}
+  <div class="clocks">
+    {% if case.acknowledge_due and not case.acknowledged %}
+    <p class="clock"><span>{{ copy.ACKNOWLEDGE_WITHIN }}</span> <b class="countdown" data-due="{{ case.acknowledge_due }}" data-late="{{ copy.LATE_BY }}">--:--</b></p>
+    {% elif case.acknowledged %}
+    <p class="clock"><span>{{ copy.ACKNOWLEDGED }}</span></p>
+    {% endif %}
+    <p class="clock"><span>{{ copy.CLOSE_WITHIN }}</span> <b class="countdown" data-due="{{ case.close_due }}" data-late="{{ copy.LATE_BY }}">--:--</b></p>
+    {% if case.replacement_due %}
+    <p class="clock replacement"><span>{{ copy.REPLACEMENT }}: {{ copy.REPLACEMENT_WITHIN }}</span> <b class="countdown" data-due="{{ case.replacement_due }}" data-late="{{ copy.LATE_BY }}">--:--</b></p>
+    {% endif %}
+  </div>
+  {% if case.replacement_due %}<p class="case-note"><a href="/cases/{{ case.id }}/replacement">{{ copy.OPEN_REQUEST }}</a></p>{% endif %}
+  <div class="actions">
+    {% if case.waiting %}<button type="button" data-action="confirm" data-case="{{ case.id }}">{{ copy.CONFIRM }}</button>{% endif %}
+    {% if case.acknowledge_due and not case.acknowledged %}<button type="button" data-action="acknowledge" data-case="{{ case.id }}">{{ copy.ACKNOWLEDGE }}</button>{% endif %}
+    <button type="button" class="close" data-action="close" data-case="{{ case.id }}">{{ copy.CLOSE }}</button>
+  </div>
+  {% endif %}
+</article>
+{% endmacro %}
+<div class="board" data-now="{{ now }}" data-scale="{{ scale }}">
+{% if replay_mode %}<p class="replay-corner" role="note">{{ copy.REPLAY_MODE_ON }}</p>{% endif %}
+{# The deadlines are trial values, and the screen must say so: a small label in the other corner. #}
+<p class="trial-corner" role="note">{{ copy.TRIAL_TIMES }}</p>
+<header class="board-head">
+  <strong class="brand">رصد</strong>
+  <time id="clock" class="clock-now" datetime="{{ now }}">{{ now[11:16] }}</time>
+  <dl class="counts">
+    <div><dt>{{ copy.COUNT_OPEN }}</dt><dd>{{ counts.open }}</dd></div>
+    <div{% if counts.critical %} class="count-critical"{% endif %}><dt>{{ copy.COUNT_CRITICAL }}</dt><dd>{{ counts.critical }}</dd></div>
+    <div><dt>{{ copy.COUNT_CLOSED_TODAY }}</dt><dd>{{ counts.closed_today }}</dd></div>
+  </dl>
+</header>
+<section id="critical-band" class="band" aria-labelledby="section-critical">
+  <h2 id="section-critical">{{ copy.SECTIONS.critical }} <span class="count"><span class="visually-hidden">{{ copy.CASES_COUNT }}: </span>{{ sections.critical | length }}</span></h2>
+  {% if sections.critical %}
+  <div class="band-cards">{% for case in sections.critical %}{{ card(case, large=True) }}{% endfor %}</div>
+  {% else %}
+  <p class="empty">{{ copy.NO_CRITICAL }}</p>
+  {% endif %}
+</section>
+<div class="columns">
+{% for key in ("now", "late", "closed") %}
+  <section class="column column-{{ key }}" aria-labelledby="section-{{ key }}">
+    <h2 id="section-{{ key }}">{{ copy.SECTIONS[key] }} <span class="count"><span class="visually-hidden">{{ copy.CASES_COUNT }}: </span>{{ sections[key] | length }}</span></h2>
+    {% for case in sections[key] %}{{ card(case) }}{% else %}<p class="empty">{{ copy.NO_CASES }}</p>{% endfor %}
   </section>
 {% endfor %}
 </div>
@@ -51,3 +75,4 @@
   <p class="empty">{{ copy.NO_NOTIFICATIONS }}</p>
   {% endfor %}
 </section>
+</div>

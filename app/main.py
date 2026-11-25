@@ -47,6 +47,9 @@ BEFORE_AFTER_FILE = PROJECT_DIR / "demo" / "before_after.json"
 # the case on the big screen is the reading time plus, at most, this.
 BOARD_REFRESH_SECONDS = 1
 
+# How far the operator may scale the type on the board (1.0 is the size of the design).
+BOARD_SCALE_MIN, BOARD_SCALE_MAX = 0.7, 2.0
+
 # Uploads larger than these are refused with a message that says what to do.
 # The reporting page makes photos smaller before sending, so a normal photo fits.
 MAX_PHOTO_BYTES = 4_000_000
@@ -165,12 +168,28 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         return templates.TemplateResponse(request, name, {"copy": copy, **values})
 
     def board_view() -> dict:
+        """Everything the board shows. The layout: a band for open critical cases, then three columns."""
         moment = now()
         cases = store.board(moment)
-        columns = {state: [case for case in cases if case["state"] == state] for state in copy.STATES}
+        open_cases = [case for case in cases if case["state"] != "closed"]
+        critical = [case for case in open_cases if case["priority"] == "critical"]
+        rest = [case for case in open_cases if case["priority"] != "critical"]
+        sections = {
+            "critical": critical,
+            "now": [case for case in rest if case["state"] != "late"],
+            "late": [case for case in rest if case["state"] == "late"],
+            "closed": [case for case in cases if case["state"] == "closed"],
+        }
+        today = moment.date().isoformat()
+        counts = {
+            "open": len(open_cases),
+            "critical": len(critical),
+            "closed_today": sum(1 for case in sections["closed"] if case["closed_at"][:10] == today),
+        }
         return {
-            "cases": cases, "columns": columns, "notifications": store.notifications(), "now": moment.isoformat(),
-            "replay_mode": mode() == "replay", "refresh_ms": BOARD_REFRESH_SECONDS * 1000,
+            "cases": cases, "sections": sections, "counts": counts, "notifications": store.notifications(),
+            "now": moment.isoformat(timespec="seconds"), "replay_mode": mode() == "replay",
+            "refresh_ms": BOARD_REFRESH_SECONDS * 1000, "scale": float(store.setting("board_scale", "1.0")),
         }  # fmt: skip
 
     # --- reports coming in -------------------------------------------------------------------
@@ -278,7 +297,9 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
     # --- what people do to a case ----------------------------------------------------------------
 
     def act(action, case_id: int, who: str):
-        if not who.strip():
+        # The name comes with the action, or from the operator page, where it is written once.
+        who = who.strip() or store.setting("board_name", "")
+        if not who:
             return problem(400, copy.NAME_NEEDED)
         try:
             action(case_id, who.strip(), now())
@@ -328,7 +349,7 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
     @app.get("/api/board")
     def board_data():
         view = board_view()
-        return {"cases": view["cases"], "notifications": view["notifications"], "now": view["now"]}
+        return {key: view[key] for key in ("cases", "sections", "counts", "notifications", "now", "scale")}
 
     @app.get("/board", response_class=HTMLResponse)
     def board_page(request: Request):
@@ -459,8 +480,9 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
     def operator_page(request: Request):
         message, app.state.operator_message = app.state.operator_message, None
         return page(
-            request, "operator.html", mode=mode(), last_voice=app.state.last_voice, checks=checks(), message=message
-        )
+            request, "operator.html", mode=mode(), last_voice=app.state.last_voice, checks=checks(), message=message,
+            board_name=store.setting("board_name", ""), board_scale=float(store.setting("board_scale", "1.0")),
+        )  # fmt: skip
 
     def back_to_operator(result):
         app.state.operator_message = said(result)
@@ -473,6 +495,21 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
     @app.post("/operator/scene/{step}")
     def operator_scene_form(step: str):
         return back_to_operator(play(step))
+
+    @app.post("/operator/board-name")
+    def operator_board_name(name: str = Form("")):
+        """The name that signs the actions taken on the board (acknowledge, confirm, close)."""
+        store.set_setting("board_name", name.strip()[:40])
+        app.state.operator_message = f"{copy.BOARD_NAME_NOW}: {name.strip()[:40]}" if name.strip() else copy.BOARD_NAME_NONE
+        return RedirectResponse("/operator", status_code=303)
+
+    @app.post("/operator/board-size")
+    def operator_board_size(change: str = Form("")):
+        """Makes the type on the board larger or smaller, one step at a time."""
+        step = {"larger": 0.1, "smaller": -0.1}.get(change, 0.0)
+        scale = round(min(BOARD_SCALE_MAX, max(BOARD_SCALE_MIN, float(store.setting("board_scale", "1.0")) + step)), 1)
+        store.set_setting("board_scale", str(scale))
+        return RedirectResponse("/operator", status_code=303)
 
     @app.post("/operator/reset")
     def operator_reset_form(confirm: str = Form("")):

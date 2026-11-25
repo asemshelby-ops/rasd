@@ -17,6 +17,7 @@ from app.store import Store
 from rasd.cases import with_reporting_hotel
 from rasd.privacy import redact
 from rasd.routing import HOTELS, match_hotel
+from rasd.text import language_of
 from rasd.understand import Understanding, not_understood, understand
 
 log = logging.getLogger("rasd")
@@ -54,5 +55,5 @@ def take_in(
     report = replace(report, has_passport_number=bool(private.passport), has_visa_number=bool(private.visa))
     reporting_hotel = listed_hotel(hotel)
     report = with_reporting_hotel(report, reporting_hotel)
-    report_id, case_id, joined = store.add_report(report, at, reporting_hotel, source, safe, private)
+    report_id, case_id, joined = store.add_report(report, at, reporting_hotel, source, safe, private, language_of(safe))
     return report_id, case_id, joined, report

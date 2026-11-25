@@ -93,6 +93,8 @@ class Store:
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(TABLES)
+        if "language" not in [row["name"] for row in self.db.execute("pragma table_info(reports)")]:
+            self.db.execute("alter table reports add column language text")  # a file made before the design pass
         self.lock = threading.Lock()  # the pages are served from several threads
 
     # --- settings and clearing ------------------------------------------------------------
@@ -132,13 +134,14 @@ class Store:
         source: str,
         safe_text: str,
         private: PrivateNumbers = PrivateNumbers(),
+        language: str | None = None,
     ) -> tuple[int, int | None, bool]:
         """Saves a report and puts it in a case. Returns (report id, case id or None, joined an existing case)."""
         with self.lock, self.db:
             report_id = self.db.execute(
-                "insert into reports (received_at, reporting_hotel, source, safe_text, report) values (?, ?, ?, ?, ?)",
+                "insert into reports (received_at, reporting_hotel, source, safe_text, report, language) values (?, ?, ?, ?, ?, ?)",
                 # The words of a message that is not a report are not kept: only that it came.
-                (received_at.isoformat(), reporting_hotel, source, safe_text if report.is_report else "", _report_to_json(report)),
+                (received_at.isoformat(), reporting_hotel, source, safe_text if report.is_report else "", _report_to_json(report), language),
             ).lastrowid
             if not report.is_report:
                 return report_id, None, False
@@ -343,8 +346,17 @@ class Store:
         with self.lock:
             rows = self.db.execute("select * from cases order by id").fetchall()
             saved = self.db.execute("select distinct case_id from reports where source = ?", (SAVED_SOURCE,)).fetchall()
+            spoken = self.db.execute("select case_id, language from reports where language is not null order by id").fetchall()
         from_saved = {row["case_id"] for row in saved}
-        cases = [{**self._public(row, now), "from_saved": row["id"] in from_saved} for row in rows]
+        languages: dict[int, list[str]] = {}
+        for row in spoken:  # each language once, in the order the reports came
+            names = languages.setdefault(row["case_id"], [])
+            if row["language"] in copy.LANGUAGES and copy.LANGUAGES[row["language"]] not in names:
+                names.append(copy.LANGUAGES[row["language"]])
+        cases = [
+            {**self._public(row, now), "from_saved": row["id"] in from_saved, "languages": languages.get(row["id"], [])}
+            for row in rows
+        ]
         order = list(URGENCIES)
         cases.sort(key=lambda case: (case["state"] == "closed", order.index(case["priority"]), case["first_at"]))
         return cases

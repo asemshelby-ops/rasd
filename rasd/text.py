@@ -15,3 +15,23 @@ _URDU_LETTERS = str.maketrans({"ک": "ك", "ی": "ي", "ہ": "ه", "ھ": "ه", "
 def arabic_letters(text: str) -> str:
     """Rewrite Urdu forms of letters as the Arabic ones, so that one name has one spelling."""
     return text.translate(_URDU_LETTERS)
+
+# Letters Urdu writes and Arabic does not. Gulf Arabic borrows a few others (گ چ پ), so those do not count.
+_URDU_ONLY = set("ٹڈڑںےہھۓ")
+_URDU_FORMS = set("کی")
+
+
+def language_of(text: str) -> str | None:
+    """The language a message is written in, told by its letters: "ar", "ur", "en", or None.
+
+    It is only used to label a report on the board (two chips when two reports merge).
+    """
+    letters = [character for character in text if character.isalpha()]
+    if not letters:
+        return None
+    arabic_script = [c for c in letters if "\u0600" <= c <= "\u06ff" or "\u0750" <= c <= "\u077f"]
+    if len(arabic_script) * 2 < len(letters):
+        return "en" if any("a" <= c.lower() <= "z" for c in letters) else None
+    urdu_only = sum(1 for c in arabic_script if c in _URDU_ONLY)
+    urdu_forms = sum(1 for c in arabic_script if c in _URDU_FORMS)
+    return "ur" if urdu_only >= 2 or (urdu_only >= 1 and urdu_forms >= 1) else "ar"

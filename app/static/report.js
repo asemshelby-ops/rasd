@@ -167,6 +167,14 @@
   // the button says so and the sender types instead.
   var recorder = null;
   var pieces = [];
+  var caption = document.getElementById("record-caption");
+  // The round button keeps its picture; its name and the line under it say what a tap does now.
+  function setRecording(on) {
+    var words = on ? T.stopAndSend : T.record;
+    record.classList.toggle("recording", on);
+    record.setAttribute("aria-label", words);
+    if (caption) { caption.textContent = words; }
+  }
   record.addEventListener("click", function () {
     if (recorder) { recorder.stop(); return; }
     if (!navigator.mediaDevices || !window.MediaRecorder) { say(T.micBlocked); return; }
@@ -183,12 +191,12 @@
         var ending = kind.indexOf("mp4") >= 0 ? "m4a" : (kind.indexOf("ogg") >= 0 ? "ogg" : "webm");
         body.append("audio", new Blob(pieces, { type: kind }), "note." + ending);
         recorder = null;
-        record.textContent = T.record;
+        setRecording(false);
         bubble("🎤 …", true);
         send("/api/voice", body);
       };
       recorder.start();
-      record.textContent = T.stopAndSend;
+      setRecording(true);
     }).catch(function () { say(T.micBlocked); });
   });
 })();

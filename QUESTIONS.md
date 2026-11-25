@@ -355,3 +355,50 @@ Choices I made while building them:
     service on one recording. The request and its errors are tested with the
     network replaced; the live service itself has still never been called.
 
+## Design pass (owner's design brief, 26 November 2026)
+
+The brief was followed as written: the colour tokens, IBM Plex Sans Arabic
+only, the sizes, the critical band and three columns, the header with three
+counts, the corner replay label, the merge stamp with one pulse, the phone page
+as a messaging app. Choices I made where the brief was silent:
+
+88. **The font files are in the project** (`app/static/fonts/`, SIL Open Font
+    License, licence file beside them), so the pages look the same with no
+    internet. `sans-serif` is listed after it only as the browser's last resort.
+89. **The name that signs board actions is written once on the operator
+    page** and kept on the laptop, because the name box left the board. One name
+    signs for whoever stands at the board until it is changed. A name sent with
+    an action still wins. Without a saved name the board's buttons refuse and
+    say where to write it.
+90. **The board keeps its three action buttons** (acknowledge, confirm, close)
+    on each card, small, under the countdowns: the scene closes a case with one
+    tap on the board.
+91. **The type size is a setting on the operator page** (70% to 200%, 100% is
+    the brief's sizes: title 30px, place 22px, countdown 40px, column title
+    24px). Cards in the critical band are larger: 40px and 52px.
+92. **Open critical cases are always in the band**, also when overdue or
+    waiting for the supervisor; a tag on the card says which. A closed critical
+    case goes to the closed column.
+93. **The language of a report is told from its letters** (`rasd.text.
+    language_of`): Arabic, Urdu or English. It is stored per report and only its
+    name is shown. A case shows each language once.
+94. **The stamp stays on a merged card**; only the pulse (one second, once) is
+    the animation. With reduced motion there is no pulse.
+95. **Overdue takes no priority colour**, because each colour has one meaning:
+    an overdue clock turns dark and says «تأخرت».
+96. **The thick priority border is on the left of every card**, as the brief
+    says "left", although the page reads right to left.
+97. **The label «المدد قيم تجريبية» stays on the board** as a small corner
+    label, because unmeasured numbers must be labelled.
+98. **Accessibility review of the new screens** (`design:accessibility-review`).
+    Every text pair passes: text on background 14.7, on cards 16.6, muted 6.3
+    and 7.1, white on critical 6.5, on medium 5.8, on normal 5.8, on green 6.3.
+    One limit: white on the urgent colour is 4.2 to 1, which passes only for
+    large bold text, so a priority badge is never under 20px bold. The line
+    colour is 1.2 to 1 against the background, so it is decoration only: every
+    button and field has a dark border. Focus is a 4px dark ring. Nothing on the
+    phone page is under 16px (measured in a browser). At 200% zoom the board
+    does not scroll sideways. Not checked: a real screen reader.
+99. **Screenshots** before and after are in `screenshots/design/`, taken in
+    replay mode (no API calls).
+

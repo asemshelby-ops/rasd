@@ -14,11 +14,11 @@ these before changing anything:
 
 - `MORNING_REPORT.md` (Arabic): the report to the owner, with what is needed from them.
 - `PROGRESS.md`: what each stage did, test counts, measurements, API spending.
-- `QUESTIONS.md`: the 87 choices made without the owner, numbered. The owner
+- `QUESTIONS.md`: the 99 choices made without the owner, numbered. The owner
   has not yet confirmed them, except the three listed below. Treat the rest as provisional.
 - `DEMO.md` (Arabic): demo-day guide. `WHATSAPP_COUNT.md` (Arabic): the counting tool.
 
-What exists (899 tests, `python -m pytest`, no key and no network needed):
+What exists (924 tests, `python -m pytest`, no key and no network needed):
 
 - `rasd/`: the rules. The model READS a message (`understand.py`); the team's
   tables DECIDE owner, priority and deadlines (`routing.py`); our code CHECKS
@@ -274,6 +274,12 @@ Decided by the owner on 26 November 2026, after the morning report (built and te
   hotel name that is not in the team's list. The supervisor page
   (`/supervisor`) is the only page that shows message text.
 - Every Arabic sentence of the pages is in `app/copy.py`.
+- The look follows the owner's design brief of 26 November 2026 (colour
+  tokens with one meaning each, IBM Plex Sans Arabic only, served from
+  `app/static/fonts/`, board sizes, critical band plus three columns, one
+  animation: the merge pulse). The tokens are at the top of
+  `app/static/style.css`. Do not add colours, fonts or animations. The name that
+  signs board actions and the board's type size are set on the operator page.
 - The scene's words have one source, `demo/scene.py`. After changing them run
   `python -m demo.make_scene_assets`, `python -m demo.record_scene` (three
   paid calls) and the tests.

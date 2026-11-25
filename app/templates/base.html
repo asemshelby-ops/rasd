@@ -8,7 +8,7 @@
 </head>
 <body class="{% block body_class %}{% endblock %}">
 <a class="skip" href="#main">انتقل إلى المحتوى</a>
-<header class="top">
+{% block header %}<header class="top">
   <strong class="brand">رصد</strong>
   <nav aria-label="صفحات رصد">
     <a href="/">البداية</a>
@@ -16,7 +16,7 @@
     <a href="/elm">متابعة بدل الفاقد</a>
     <a href="/before-after">قبل وبعد</a>
   </nav>
-</header>
+</header>{% endblock %}
 <main id="main">
 {% block main %}{% endblock %}
 </main>

@@ -14,6 +14,24 @@
   </form>
 </section>
 
+<section class="panel" aria-labelledby="name-title">
+  <h2 id="name-title">{{ copy.BOARD_NAME_TITLE }}</h2>
+  <p>{% if board_name %}{{ copy.BOARD_NAME_NOW }}: <b>{{ board_name }}</b>{% else %}{{ copy.BOARD_NAME_NONE }}{% endif %}</p>
+  <form method="post" action="/operator/board-name" class="row">
+    <label for="board-name">{{ copy.YOUR_NAME }}</label>
+    <input id="board-name" name="name" type="text" value="{{ board_name }}" autocomplete="name" required>
+    <button type="submit" class="primary">{{ copy.BOARD_NAME_SAVE }}</button>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="size-title">
+  <h2 id="size-title">{{ copy.BOARD_SIZE_TITLE }}: {{ (board_scale * 100) | round | int }}%</h2>
+  <div class="row">
+    <form method="post" action="/operator/board-size"><input type="hidden" name="change" value="smaller"><button type="submit">{{ copy.SMALLER }}</button></form>
+    <form method="post" action="/operator/board-size"><input type="hidden" name="change" value="larger"><button type="submit">{{ copy.LARGER }}</button></form>
+  </div>
+</section>
+
 <section class="panel" aria-labelledby="steps-title">
   <h2 id="steps-title">{{ copy.SCENE_STEPS }}</h2>
   <p>{{ copy.SCENE_STEPS_HELP }}</p>

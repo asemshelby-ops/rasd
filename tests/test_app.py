@@ -496,10 +496,10 @@ def test_the_before_and_after_page_puts_the_group_chat_next_to_the_same_reports_
     assert copy.FICTIONAL_GROUP in page
 
 
-def test_the_board_page_names_its_four_columns(site):
+def test_the_board_page_names_its_band_and_its_three_columns(site):
     page = site.get("/board").text
-    for state in ("waiting", "routed", "late", "closed"):
-        assert copy.STATES[state] in page
+    for title in copy.SECTIONS.values():  # the layout of the owner's design brief
+        assert title in page
 
 
 # --- the board for people who do not see it, or do not use a mouse (accessibility review) ---------------
@@ -515,9 +515,8 @@ def test_the_board_is_not_read_out_whole_every_time_it_refreshes(site):
 
 
 def test_the_operator_can_make_the_board_type_larger_for_the_hall(site):
-    page = site.get("/board").text
-    assert copy.LARGER in page and copy.SMALLER in page
-    assert '<html lang="ar" dir="rtl" class="board-root">' in page
+    assert copy.LARGER in site.get("/operator").text  # the buttons moved off the board (design brief)
+    assert '<html lang="ar" dir="rtl" class="board-root">' in site.get("/board").text
 
 
 def test_the_number_beside_a_column_title_says_what_it_counts(site):
