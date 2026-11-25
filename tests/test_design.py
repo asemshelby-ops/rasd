@@ -275,6 +275,22 @@ def test_the_attachments_are_behind_one_small_plus_button(site):
     page = site.get("/report").text
     more = page[page.index('<details class="more"') : page.index("</details>")]
     assert f'aria-label="{copy.MORE_ATTACHMENTS}"' in more and ">+<" in more
-    for control in ('id="audio-file"', 'id="pilgrim-photo"', 'id="card-photo"'):
+    for control in ('id="audio-file"', 'id="pilgrim-photo"'):
         assert control in more
+    assert "<details class=\"more\" id=\"more\">" in page  # no "open": it starts closed
     assert page.index('id="text"') < page.index('id="record"')  # the text box is the second option, above the record button
+
+
+def test_the_plus_menu_is_never_opened_by_the_page_itself(site):
+    assert ".open = true" not in site.get("/static/report.js").text
+
+
+def test_the_mock_card_is_one_suggestion_button_above_the_text_box_hidden_until_it_is_possible(site):
+    page = site.get("/report").text
+    more = page[page.index('<details class="more"') : page.index("</details>")]
+    assert 'id="card-photo"' not in more
+    button = page[page.index('id="card-button"') - 80 : page.index('id="card-photo"') + 120]
+    assert "suggestion" in button and " hidden>" in button and copy.SHOW_CARD in button
+    assert 'capture="environment"' in button  # it opens the camera directly
+    assert page.index('id="chat"') < page.index('id="card-button"') < page.index('id="text"')
+

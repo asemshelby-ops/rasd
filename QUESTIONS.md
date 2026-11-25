@@ -407,6 +407,8 @@ as a messaging app. Choices I made where the brief was silent:
 border on the start side (96); one critical case spans the band and two or more
 share the row equally; on the phone page the record button is the only main
 action, the text box is the second option, and the three attachments are
-behind one small "+". My choice there: when the mock-card step becomes
-possible the "+" opens by itself, so the button is not hidden during the scene.
+behind one small "+". The owner then decided: the "+" is always closed by
+default; when the mock-card step becomes possible one highlighted suggestion
+button appears above the text box and opens the camera directly, and it hides
+again after the card is read.
 

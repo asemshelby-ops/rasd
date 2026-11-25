@@ -154,6 +154,8 @@ html.board-root { font-size: calc(16px * var(--board-scale, 1)); }
 .composer { background: var(--card); border-top: 2px solid var(--line); padding: .6rem .8rem .8rem; }
 .composer-row { display: flex; gap: .5rem; align-items: flex-end; }
 .composer textarea { flex: 1; min-height: 48px; resize: none; }
+/* A suggestion for the next step: stands out by its heavy border, with no meaning colour. */
+.suggestion { width: 100%; justify-content: center; min-height: 56px; border-width: 4px; font-size: 1.1rem; margin-bottom: .6rem; }
 /* The one small "+" that opens the attachments. */
 .more { position: relative; }
 .more summary { list-style: none; width: 48px; height: 48px; border: 2px solid var(--text); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; font-weight: 700; cursor: pointer; }

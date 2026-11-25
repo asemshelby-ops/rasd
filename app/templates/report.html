@@ -24,6 +24,10 @@
 <p id="report-message" class="message" role="alert" hidden></p>
 <p class="resend-row"><button type="button" id="resend" hidden>{{ copy.RESEND }}</button></p>
 <div class="composer">
+  {# Shown only while photographing the mock card is possible: after a lost-pilgrim report, until the card is read. #}
+  <label class="file-button suggestion" id="card-button" hidden>{{ copy.SHOW_CARD }}
+    <input id="card-photo" type="file" accept="image/*" capture="environment">
+  </label>
   {# Second option: the text box, with the one small "+" that opens the attachments. #}
   <div class="composer-row">
     <details class="more" id="more">
@@ -34,9 +38,6 @@
         </label>
         <label class="file-button">{{ copy.ATTACH_PHOTO }}
           <input id="pilgrim-photo" name="pilgrim_photo" type="file" accept="image/*" capture="environment">
-        </label>
-        <label class="file-button" id="card-button" hidden>{{ copy.SHOW_CARD }}
-          <input id="card-photo" type="file" accept="image/*" capture="environment">
         </label>
         <p class="note">{{ copy.PHOTO_NOTE }}</p>
       </div>
