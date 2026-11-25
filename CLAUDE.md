@@ -18,7 +18,7 @@ these before changing anything:
   has not yet confirmed them, except the three listed below. Treat the rest as provisional.
 - `DEMO.md` (Arabic): demo-day guide. `WHATSAPP_COUNT.md` (Arabic): the counting tool.
 
-What exists (955 tests, `python -m pytest`, no key and no network needed):
+What exists (957 tests, `python -m pytest`, no key and no network needed):
 
 - `rasd/`: the rules. The model READS a message (`understand.py`); the team's
   tables DECIDE owner, priority and deadlines (`routing.py`); our code CHECKS

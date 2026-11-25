@@ -146,6 +146,8 @@ SCENE_STEPS_HELP = "كل زر يرسل الملف المحفوظ كأنه وصل
 STEP_COUNTER = "1. أرسل رسالة موظف الاستقبال"
 STEP_PILGRIM = "2. أرسل رسالة الحاج"
 STEP_CARD = "3. اقرأ البطاقة التجريبية"
+# The last step is done on the board itself, so the case goes through every progress step on stage.
+STEP_ON_BOARD = f"4. على اللوحة: اضغط «{ACKNOWLEDGE}» ثم «{CLOSE}»"
 NO_CASE_FOR_CARD = "لا توجد حالة حاج تائه مفتوحة. أرسل رسالة موظف الاستقبال أولاً."
 CLEAR_DEMO = "امسح حالات العرض"
 CLEAR_HELP = "يمسح كل ما على اللوحة قبل عرض جديد. لا يمكن التراجع."

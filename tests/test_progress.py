@@ -298,3 +298,20 @@ def test_the_steps_use_only_the_colours_of_the_design_brief(site):
     tokens = {"#EEF2F1", "#FFFFFF", "#10202B", "#4A5A66", "#D5DDDB", "#B3261E", "#B26A00", "#1F6F78", "#5B6770", "#0B6E4F"}
     assert set(re.findall(r"#[0-9A-F]{6}\b", css)) <= tokens
     assert ".PROGRESS" in css
+
+
+# --- on stage the case goes through every step: acknowledge before closing ---------------------------------
+
+
+def test_the_scenario_card_tells_the_supervisor_to_acknowledge_before_closing(site):
+    page = site.get("/scenario-card").text
+    assert f"«{copy.ACKNOWLEDGE}»" in page
+    assert page.index(f"«{copy.ACKNOWLEDGE}»") < page.rindex(f"«{copy.CLOSE}»")
+
+
+def test_the_operators_step_list_ends_with_acknowledge_then_close_on_the_board(site):
+    page = site.get("/operator").text
+    assert copy.STEP_ON_BOARD in page
+    assert copy.ACKNOWLEDGE in copy.STEP_ON_BOARD and copy.CLOSE in copy.STEP_ON_BOARD
+    assert copy.STEP_ON_BOARD.index(copy.ACKNOWLEDGE) < copy.STEP_ON_BOARD.index(copy.CLOSE)
+    assert page.index(copy.STEP_CARD) < page.index(copy.STEP_ON_BOARD)

@@ -200,6 +200,7 @@ table.elm .countdown { font-size: 1.3rem; }
 .panel form { margin: .5rem 0; }
 .panel.mode-replay { border-color: var(--text); border-width: 4px; }
 .panel .row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.next-on-board { font-weight: 700; border: 2px dashed var(--muted); border-radius: 10px; padding: .6rem .8rem; margin: .5rem 0 0; }
 button.big { width: 100%; min-height: 64px; font-size: 1.15rem; justify-content: center; }
 .measured { font-size: 2rem; margin: 0; }
 .checks { list-style: none; padding: 0; margin: 0; }

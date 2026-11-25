@@ -445,3 +445,10 @@ labels in `app/copy.py`, existing colours only. Choices I made:
      so the log's meaning did not change.
 
 **The owner approved 100 to 105 on review**, with the change in 102.
+
+**The scene now acknowledges before closing** (owner's decision): the scenario
+card, `DEMO.md`, `README.md` and the operator's step list say to press
+«استلمتُ الحالة» and then «أغلق الحالة», so the case goes through every step on
+stage. The skipped-step behaviour is unchanged. `DEMO.md` has a line for the
+judges' questions on how to show a skipped step.
+
