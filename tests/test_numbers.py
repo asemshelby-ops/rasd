@@ -6,7 +6,17 @@ room numbers of the benchmark reports, so the benchmark stays an honest check.
 
 import pytest
 
-from rasd.numbers import TEEN_ENDINGS, contains_number, contains_words, spoken_number, teen_spellings
+from rasd.numbers import (
+    HUNDRED_ENDINGS,
+    TEEN_ENDINGS,
+    contains_number,
+    contains_words,
+    contains_words_in_order,
+    hundred_spellings,
+    normalise,
+    spoken_number,
+    teen_spellings,
+)
 
 
 @pytest.mark.parametrize(
@@ -242,3 +252,73 @@ def test_the_parser_reads_every_listed_spelling_with_every_ending():
             beginning = word.removesuffix(TEEN_ENDINGS[0])
             for ending in TEEN_ENDINGS:
                 assert spoken_number(beginning + ending) == str(number), beginning + ending
+
+
+# --- the dialect words for the hundreds, as a list the prompt can show -------
+
+
+def test_hundred_spellings_cover_one_hundred_to_nine_hundred():
+    spellings = hundred_spellings()
+    assert sorted(spellings) == [100, 200, 300, 400, 500, 600, 700, 800, 900]
+    assert all(spellings[number] for number in spellings)
+
+
+def test_hundred_spellings_are_written_the_way_people_write_them():
+    assert "ستمية" in hundred_spellings()[600]
+    assert "مية" in hundred_spellings()[100]
+    assert "ميتين" in hundred_spellings()[200]
+
+
+def test_no_hundred_word_is_listed_under_two_numbers():
+    words = [word for spellings in hundred_spellings().values() for word in spellings]
+    assert len(words) == len(set(words))
+
+
+def test_the_parser_reads_every_listed_hundred_as_its_number():
+    for number, spellings in hundred_spellings().items():
+        for word in spellings:
+            assert spoken_number(word) == str(number), word
+
+
+def test_the_parser_reads_the_hundreds_from_300_with_every_ending():
+    for number, spellings in hundred_spellings().items():
+        if number < 300:
+            continue
+        for word in spellings:
+            beginning = normalise(word).removesuffix(HUNDRED_ENDINGS[0])
+            for ending in HUNDRED_ENDINGS:
+                assert spoken_number(beginning + ending) == str(number), beginning + ending
+
+
+# --- words quoted from two parts of a message ----------------------------------
+
+SMOKE = "في دخان طالع من المطبخ في الدور التاسع، وصوت إنذار"
+
+
+def test_words_from_two_parts_of_a_message_are_found_in_order():
+    assert contains_words_in_order(SMOKE, "دخان طالع من المطبخ وصوت إنذار") is True
+
+
+def test_one_continuous_piece_is_found_too():
+    assert contains_words_in_order(SMOKE, "دخان طالع من المطبخ") is True
+
+
+def test_punctuation_and_a_glued_and_do_not_matter():
+    assert contains_words_in_order(SMOKE, "دخان طالع، صوت إنذار") is True
+
+
+def test_a_word_that_is_not_in_the_message_is_not_found():
+    assert contains_words_in_order(SMOKE, "دخان طالع من الغرفة") is False
+
+
+def test_words_in_the_wrong_order_are_not_found():
+    assert contains_words_in_order(SMOKE, "صوت إنذار دخان طالع") is False
+
+
+def test_a_word_cannot_be_used_twice():
+    assert contains_words_in_order(SMOKE, "دخان دخان") is False
+
+
+def test_empty_words_are_never_found():
+    assert contains_words_in_order(SMOKE, "") is False
+    assert contains_words_in_order(SMOKE, " ، ") is False

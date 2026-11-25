@@ -8,8 +8,11 @@ message states raises it one level.
 import pytest
 
 from rasd.routing import (
+    ACKNOWLEDGE_MINUTES,
     CURRENT_STAGE,
     DEADLINE_MINUTES,
+    DEADLINES_ARE_SAMPLE_DATA,
+    FAULT_TYPES,
     OWNER_BY_TYPE,
     PRIORITY_BY_TYPE,
     PRIORITY_IN_STAGE,
@@ -28,9 +31,19 @@ def test_every_priority_level_has_a_deadline():
     assert set(DEADLINE_MINUTES) == set(URGENCIES)
 
 
-def test_a_more_urgent_level_never_has_a_longer_deadline():
-    minutes = [DEADLINE_MINUTES[level] for level in URGENCIES]
-    assert minutes == sorted(minutes)
+def test_a_critical_report_has_two_steps_acknowledge_in_5_minutes_and_close_in_30():
+    assert ACKNOWLEDGE_MINUTES == {"critical": 5}
+    assert DEADLINE_MINUTES["critical"] == 30
+
+
+def test_the_minutes_are_marked_as_trial_values():
+    assert DEADLINES_ARE_SAMPLE_DATA is True
+
+
+def test_a_more_urgent_level_never_waits_longer_for_its_first_answer():
+    # The first answer is the acknowledgement where there is one, otherwise the closing.
+    first = [ACKNOWLEDGE_MINUTES.get(level, DEADLINE_MINUTES[level]) for level in URGENCIES]
+    assert first == sorted(first)
 
 
 # --- the default priority of each type --------------------------------------
@@ -120,7 +133,7 @@ def test_priority_stops_at_critical():
 
 
 def test_every_kind_of_risk_counts_the_same():
-    assert list(RISKS) == ["elderly", "sick", "medication", "time_limit", "alone_or_lost"]
+    assert list(RISKS) == ["elderly", "sick", "medication", "time_limit", "alone_or_lost", "danger"]
     for risk in RISKS:
         assert priority_for("luggage", risks=(risk,), stage="makkah") == "urgent"
 
@@ -138,3 +151,37 @@ def test_risks_are_added_on_top_of_the_stage_priority():
 def test_a_risk_that_does_not_exist_is_an_error():
     with pytest.raises(ValueError, match="risk"):
         priority_for("luggage", risks=("angry",), stage="makkah")
+
+
+def test_immediate_physical_danger_raises_the_priority_one_level():
+    assert priority_for("power_elevator", risks=("danger",), stage="makkah") == "critical"
+    assert priority_for("cleaning", risks=("danger",), stage="makkah") == "medium"
+
+
+# --- a fault the message says is only partial ---------------------------------
+
+
+def test_the_faults_are_ac_water_and_electricity_or_elevator():
+    assert set(FAULT_TYPES) == {"ac", "water", "power_elevator"}
+
+
+@pytest.mark.parametrize("type", ["ac", "water", "power_elevator"])
+def test_a_partial_fault_is_one_level_below_the_default_of_its_type(type):
+    assert priority_for(type, risks=(), stage="makkah") == "urgent"
+    assert priority_for(type, risks=(), stage="makkah", partial=True) == "medium"
+
+
+def test_partial_only_applies_to_faults():
+    for type in TYPES:
+        if type not in FAULT_TYPES:
+            assert priority_for(type, risks=(), stage="makkah", partial=True) == PRIORITY_BY_TYPE[type], type
+
+
+def test_a_stated_risk_still_raises_a_partial_fault():
+    assert priority_for("ac", risks=("elderly",), stage="makkah", partial=True) == "urgent"
+    assert priority_for("ac", risks=("elderly", "sick"), stage="makkah", partial=True) == "critical"
+
+
+def test_priority_never_goes_below_normal(monkeypatch):
+    monkeypatch.setitem(PRIORITY_BY_TYPE, "water", "normal")
+    assert priority_for("water", risks=(), stage="makkah", partial=True) == "normal"

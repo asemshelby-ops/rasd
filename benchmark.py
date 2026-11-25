@@ -55,7 +55,7 @@ SET_NAMES = {"main": "الأساسية", "holdout": "المحجوبة"}
 RETRIES = 6
 
 # Words copied from a message. They are left out of anything saved about holdout reports.
-WORDS_FROM_THE_MESSAGE = ("number_words", "risk_words")
+WORDS_FROM_THE_MESSAGE = ("number_words", "risk_words", "partial_words")
 
 
 def check_access(client, model: str) -> None:

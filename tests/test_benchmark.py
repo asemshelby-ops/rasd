@@ -209,6 +209,7 @@ GOOD_READING = {
     "number_words": "",
     "location_number": "",
     "risks": [],
+    "partial_words": "",
     "confidence": "high",
 }
 MAIN = len(load_reports())  # how many main reports there are
@@ -567,3 +568,14 @@ def test_the_two_comparisons_cannot_be_asked_for_together(with_holdout):
     with pytest.raises(SystemExit):
         benchmark.main(["--compare", "claude-sonnet-5-5", "--compare-holdout", "claude-sonnet-5-5"])
     assert with_holdout.asked == []
+
+
+def test_compare_holdout_leaves_every_field_of_copied_words_out_of_its_record(with_holdout, monkeypatch):
+    # "held" is a word of the made-up holdout messages, so the engine accepts it as the partial words.
+    monkeypatch.setitem(GOOD_READING, "type", "ac")
+    monkeypatch.setitem(GOOD_READING, "partial_words", "held")
+    benchmark.main(["--compare-holdout", "claude-sonnet-5-5"])
+    record = json.loads((with_holdout.comparison / "holdout_answers.json").read_text(encoding="utf-8"))
+    saved_fields = set(record["runs"][0]["answers"]["1"])
+    assert record["runs"][0]["answers"]["1"]["partial"] is True
+    assert not {"number_words", "risk_words", "partial_words"} & saved_fields

@@ -39,6 +39,7 @@ RISKS = {
     "medication": "دواء",
     "time_limit": "موعد قريب",
     "alone_or_lost": "حاج وحده أو تائه",
+    "danger": "خطر جسدي مباشر",
 }
 
 # The stages of the pilgrim's journey. The operations room sets the current one by hand.
@@ -68,6 +69,7 @@ FLAG_REASONS = {
     "no_location": "المكان غير مذكور أو رقمه ناقص",
     "number_not_confirmed": "رقم المكان لم يتأكد آلياً",
     "risk_not_confirmed": "خطر قرأه النموذج ولم يتأكد آلياً",
+    "partial_not_confirmed": "عطل جزئي قرأه النموذج ولم يتأكد آلياً",
     "low_confidence": "ثقة النموذج في فهمه منخفضة",
     "not_understood": "تعذّر فهم البلاغ آلياً",
 }

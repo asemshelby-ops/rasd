@@ -714,3 +714,19 @@ def test_stability_for_holdout_reports_is_titled_so():
 def test_every_line_of_the_stability_section_starts_right_to_left():
     text = render_stability(*three_runs(second={2: answer(loc_number="355", urgency="critical")}))
     assert all(line.startswith("‏") for line in text.splitlines() if line)
+
+
+# --- a wrong priority also says whether the model read the fault as partial -----
+
+
+def test_a_wrong_priority_shows_that_the_model_read_the_fault_as_partial():
+    read = answer(urgency="normal", partial=True, partial_words="بس شغال")
+    text = render(run_of({1: read}), [sample(1)], {1: expected(1)})
+    assert "الأولوية: المتوقع «متوسط»، الناتج «عادي» (لم يقرأ النموذج أي خطر، وقرأ أن العطل جزئي «بس شغال»)" in text
+
+
+def test_the_partial_words_of_a_holdout_report_are_not_printed():
+    wrong = {1: answer(urgency="normal", partial=True, partial_words="كلمات محجوبة"), 2: answer(type="ac"), 3: answer(loc_number="355")}
+    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)}, holdout=a_holdout(wrong))
+    assert "وقرأ أن العطل جزئي)" in holdout_part(text)
+    assert "كلمات محجوبة" not in text

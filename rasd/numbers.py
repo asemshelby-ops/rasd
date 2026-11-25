@@ -50,6 +50,28 @@ def contains_words(message: str, quote: str) -> bool:
     return f" {quote} " in message or f" و{quote} " in message
 
 
+def contains_words_in_order(message: str, quote: str) -> bool:
+    """True if every word of the quote is in the message, in the same order.
+
+    Other words may stand between them: a model often quotes two parts of a
+    message as one piece. A leading "و" (and) on a word is ignored.
+    """
+
+    def bare(word: str) -> str:
+        return word[1:] if word.startswith("و") and len(word) > 1 else word
+
+    wanted = [bare(word) for word in normalise(quote).split()]
+    if not wanted:
+        return False
+    position = 0
+    for word in normalise(message).split():
+        if bare(word) == wanted[position]:
+            position += 1
+            if position == len(wanted):
+                return True
+    return False
+
+
 def contains_number(message: str, number: str) -> bool:
     """True if the message has exactly this number written in digits.
 
@@ -123,8 +145,25 @@ _HUNDRED_BEGINNINGS = {
     800: "ثمان ثماني ثمن تمان تماني تمن",
     900: "تسع",
 }
-_HUNDRED_ENDINGS = "ميه مايه ميت"
+HUNDRED_ENDINGS = "ميه مايه ميت".split()  # the commonest ending comes first
 _HUNDREDS = {100: "ميه مايه ميت", 200: "ميتين ميتان مايتين مايتان"}
+
+
+def hundred_spellings() -> dict[int, list[str]]:
+    """The words for 100 to 900 with the commonest ending: 600 -> ["ستمية"], 300 -> ["ثلاثمية", ...].
+
+    They are written the way people write them, with "ة" at the end. The prompt in
+    understand.py shows this list to the model, like the list for 11 to 19.
+    """
+    words = {value: spellings.split() for value, spellings in _HUNDREDS.items()}
+    for value, beginnings in _HUNDRED_BEGINNINGS.items():
+        words[value] = [beginning + HUNDRED_ENDINGS[0] for beginning in beginnings.split()]
+    return {value: [as_written(word) for word in words[value]] for value in sorted(words)}
+
+
+def as_written(word: str) -> str:
+    """Our tables spell a final "ة" as "ه". This gives the usual spelling back: "ميه" -> "مية"."""
+    return word[:-1] + "ة" if word.endswith("ه") else word
 
 _THOUSANDS = {1000: "الف", 2000: "الفين الفان"}
 
@@ -175,7 +214,7 @@ def _build_word_table() -> dict[str, tuple[str, int]]:
     for value, words in _HUNDREDS.items():
         add("hundred", value, words.split())
     for value, beginnings in _HUNDRED_BEGINNINGS.items():
-        add("hundred", value, [b + e for b in beginnings.split() for e in _HUNDRED_ENDINGS.split()])
+        add("hundred", value, [b + e for b in beginnings.split() for e in HUNDRED_ENDINGS])
     for value, words in _THOUSANDS.items():
         add("thousand", value, words.split())
     for value, words in _ORDINALS.items():

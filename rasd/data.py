@@ -9,6 +9,7 @@ Conventions in expected.csv:
   - "-" in loc_number means "no number is expected"
   - urgency is the priority level; it is written for the journey stage EXPECTED_STAGE
   - risks (an optional column) lists the risks the message states, separated by spaces
+  - partial (an optional column) is 1 when the message says the fault is only partial
 
 A mistake in a file stops the program with a message that names the file, the
 report number and the column. The messages never show the words of a report or
@@ -59,6 +60,7 @@ class Expected:
     room_in_words: bool
     note: str
     risks: tuple[str, ...] | None = None  # the risks the message states; None = the file has no risks column
+    partial: bool = False  # True when the message says the fault is only partial
 
 
 def _name(path: Path) -> str:
@@ -164,6 +166,7 @@ def load_expected(path: Path = DATA_DIR / "expected.csv") -> dict[int, Expected]
             room_in_words=bool(_yes_no(row["room_in_words"], "room_in_words", where)),
             note=row.get("note", ""),
             risks=risks,
+            partial=bool(_yes_no(row.get("partial", ""), "partial", where)),
         )
     return expected
 

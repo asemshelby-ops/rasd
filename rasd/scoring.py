@@ -329,13 +329,17 @@ def _spoken_room_lines(t: Tally) -> list[str]:
 
 def _risks_read(actual: Understanding, show_text: bool) -> str:
     """The risks the model read in a message, for example: (المخاطر التي قرأها النموذج: دواء «أدويتها»)."""
-    if not actual.risks:
-        return "(لم يقرأ النموذج أي خطر)"
-    parts = [
-        RISKS[risk] + (f" «{words}»" if show_text and words else "")
-        for risk, words in zip_longest(actual.risks, actual.risk_words, fillvalue="")
-    ]
-    return "(المخاطر التي قرأها النموذج: " + "، ".join(parts) + ")"
+    if actual.risks:
+        parts = [
+            RISKS[risk] + (f" «{words}»" if show_text and words else "")
+            for risk, words in zip_longest(actual.risks, actual.risk_words, fillvalue="")
+        ]
+        text = "المخاطر التي قرأها النموذج: " + "، ".join(parts)
+    else:
+        text = "لم يقرأ النموذج أي خطر"
+    if actual.partial:
+        text += "، وقرأ أن العطل جزئي" + (f" «{actual.partial_words}»" if show_text and actual.partial_words else "")
+    return f"({text})"
 
 
 def _wrong_report_lines(t: Tally, show_text: bool) -> list[str]:

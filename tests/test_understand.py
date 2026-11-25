@@ -11,8 +11,8 @@ import httpx2
 import pytest
 
 from rasd.data import load_expected, load_reports
-from rasd.numbers import TEEN_ENDINGS, normalise, teen_spellings
-from rasd.routing import DEADLINE_MINUTES
+from rasd.numbers import HUNDRED_ENDINGS, TEEN_ENDINGS, hundred_spellings, normalise, teen_spellings
+from rasd.routing import ACKNOWLEDGE_MINUTES, DEADLINE_MINUTES
 from rasd import routing
 from rasd.schema import FLAG_REASONS, LOCATION_KINDS, RISKS, TYPES
 from rasd.understand import EFFORT, SYSTEM_PROMPT, Reading, build_report, make_client, understand
@@ -28,6 +28,7 @@ def reading(**changes) -> Reading:
         number_words="تسعمية وسبعة",
         location_number="907",
         risks=[],
+        partial_words="",
         confidence="high",
     )
     fields.update(changes)
@@ -128,6 +129,22 @@ def test_a_risk_whose_words_are_not_in_the_message_still_counts_but_goes_to_the_
     assert report.reasons == ("risk_not_confirmed",)
 
 
+def test_a_risk_quoted_from_two_parts_of_the_message_is_confirmed():
+    # The model often joins two pieces of the message into one quote, skipping the words between them.
+    message = "في دخان طالع من المطبخ في الدور التاسع، وصوت إنذار"
+    stated = [risk("danger", "دخان طالع من المطبخ وصوت إنذار")]
+    report = build_report(message, reading(type="power_elevator", location_kind="floor", number_words="التاسع", location_number="9", risks=stated))
+    assert report.risks == ("danger",)
+    assert report.reasons == ()
+
+
+def test_partial_words_quoted_from_two_parts_of_the_message_are_confirmed():
+    message = "مكيف غرفة تسعمية وسبعة يسرّب موية على السرير بس لسا يبرّد"
+    report = build_report(message, reading(type="ac", partial_words="يسرّب موية بس لسا يبرّد"))
+    assert report.partial is True
+    assert report.reasons == ()
+
+
 def test_a_risk_with_no_words_goes_to_the_supervisor():
     report = build_report(RISKY_MESSAGE, reading(type="cleaning", risks=[risk("elderly", "")]))
     assert report.reasons == ("risk_not_confirmed",)
@@ -138,6 +155,62 @@ def test_one_unconfirmed_risk_among_confirmed_ones_is_enough_to_ask_the_supervis
     report = build_report(RISKY_MESSAGE, reading(type="cleaning", risks=stated))
     assert report.urgency == "urgent"
     assert report.reasons == ("risk_not_confirmed",)
+
+
+# --- a fault the message says is only partial --------------------------------
+
+DRIPPING = "مكيف غرفة تسعمية وسبعة يسرّب موية بس لسا يبرّد"
+
+
+def test_a_fault_the_message_says_is_partial_goes_one_level_down():
+    report = build_report(DRIPPING, reading(type="ac", partial_words="بس لسا يبرّد"))
+    assert report.partial is True
+    assert report.urgency == "medium"
+    assert report.deadline_minutes == DEADLINE_MINUTES["medium"]
+    assert report.needs_confirmation is False
+
+
+def test_a_fault_is_not_partial_when_the_model_quotes_nothing():
+    report = build_report(DRIPPING, reading(type="ac"))
+    assert report.partial is False
+    assert report.urgency == "urgent"
+
+
+def test_partial_words_that_are_not_in_the_message_do_not_lower_the_priority_and_go_to_the_supervisor():
+    # Lowering a priority on words nobody said would be a guess. Keep the default and ask a person.
+    report = build_report(DRIPPING, reading(type="ac", partial_words="العطل بسيط"))
+    assert report.partial is False
+    assert report.urgency == "urgent"
+    assert report.reasons == ("partial_not_confirmed",)
+
+
+def test_partial_is_ignored_for_a_type_that_is_not_a_fault():
+    report = build_report(DRIPPING, reading(type="luggage", partial_words="بس لسا يبرّد"))
+    assert report.partial is False
+    assert report.urgency == "medium"
+    assert report.reasons == ()
+
+
+def test_a_stated_risk_raises_a_partial_fault_again():
+    message = DRIPPING + " وفيها حاجة كبيرة بالعمر"
+    stated = [risk("elderly", "حاجة كبيرة بالعمر")]
+    report = build_report(message, reading(type="ac", partial_words="بس لسا يبرّد", risks=stated))
+    assert report.urgency == "urgent"
+
+
+# --- critical reports: acknowledge first, then close ----------------------------
+
+
+def test_a_critical_report_must_be_acknowledged_in_5_minutes_and_closed_in_30():
+    report = build_report(MESSAGE, reading(type="health"))
+    assert report.urgency == "critical"
+    assert report.acknowledge_minutes == ACKNOWLEDGE_MINUTES["critical"] == 5
+    assert report.deadline_minutes == DEADLINE_MINUTES["critical"] == 30
+
+
+def test_other_levels_have_no_acknowledge_step():
+    for type in ("water", "luggage", "cleaning"):
+        assert build_report(MESSAGE, reading(type=type)).acknowledge_minutes is None
 
 
 def test_a_lost_nusuk_card_is_critical_when_the_stage_is_the_hajj_days():
@@ -433,7 +506,7 @@ def test_the_model_can_only_answer_with_codes_from_the_schema():
 
 def test_the_prompt_explains_every_code():
     for code in [*TYPES, *LOCATION_KINDS, *RISKS]:
-        assert code in SYSTEM_PROMPT, f"the prompt does not mention '{code}'"
+        assert f"\n- {code}: " in SYSTEM_PROMPT, f"the prompt has no line that explains '{code}'"
 
 
 def prompt_line_for(number: int) -> str:
@@ -457,6 +530,27 @@ def test_the_prompt_lists_the_palestinian_word_for_twelve():
 def test_the_prompt_says_the_ending_of_these_words_can_change():
     for ending in TEEN_ENDINGS:
         assert ending in SYSTEM_PROMPT
+
+
+def test_the_prompt_lists_every_dialect_word_our_parser_knows_for_the_hundreds():
+    for number, spellings in hundred_spellings().items():
+        listed = prompt_line_for(number).split(":", 1)[1].replace("،", " ").split()
+        assert listed == spellings
+
+
+def test_the_prompt_lists_the_word_for_six_hundred():
+    # A new report showed the small model reading this word as five hundred.
+    assert "ستمية" in prompt_line_for(600)
+
+
+def test_the_prompt_says_the_ending_of_the_hundreds_can_change():
+    for ending in HUNDRED_ENDINGS[1:]:
+        assert ending in normalise(SYSTEM_PROMPT)
+
+
+def test_the_prompt_asks_for_the_words_that_say_a_fault_is_partial():
+    assert "partial_words" in SYSTEM_PROMPT
+    assert "partial_words" in Reading.model_fields
 
 
 def test_the_prompt_does_not_contain_benchmark_room_numbers():

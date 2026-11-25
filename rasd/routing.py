@@ -6,7 +6,8 @@ the owner, the priority or the deadline. It only reads the message.
 How the priority of a report is worked out (priority_for, at the bottom):
   1. the type gives the default            PRIORITY_BY_TYPE
   2. the journey stage may change it       PRIORITY_IN_STAGE
-  3. every risk the message states in words raises it one level, up to critical
+  3. a fault the message says is only partial goes one level down
+  4. every risk the message states in words raises it one level, up to critical
 
 The priority table is the team's decision, made after a field review. It follows
 what a problem means for the pilgrim at each point of the journey. It was not
@@ -42,6 +43,9 @@ PRIORITY_BY_TYPE = {
     "unclear": "urgent",  # nobody knows what it is yet, so it may be anything
 }
 
+# The types that are faults in the building. Only these can be "partial".
+FAULT_TYPES = ("ac", "water", "power_elevator")
+
 # The stage of the journey the pilgrims are in now. The operations room changes
 # it by hand: arrival, makkah, hajj or departure. (In Phase 2 this becomes a
 # control on the board.)
@@ -53,11 +57,19 @@ PRIORITY_IN_STAGE = {
     "hajj": {"nusuk_card": "critical"},
 }
 
-# SAMPLE VALUES. These minutes are not measured and do not come from a real
-# service agreement. Replace them with the company's real targets, and label
-# them as sample data wherever they are shown until then.
-DEADLINE_MINUTES = {
+# TRIAL VALUES, in both tables below. These minutes are not measured and do not
+# come from a real service agreement. Replace them with the company's real
+# targets, and label them as trial data wherever they are shown until then.
+
+# Minutes to ACKNOWLEDGE a report: someone says "I am on it". Only critical
+# reports have this first step.
+ACKNOWLEDGE_MINUTES = {
     "critical": 5,
+}
+
+# Minutes to CLOSE a report.
+DEADLINE_MINUTES = {
+    "critical": 30,
     "urgent": 15,
     "medium": 60,
     "normal": 180,
@@ -65,11 +77,12 @@ DEADLINE_MINUTES = {
 DEADLINES_ARE_SAMPLE_DATA = True
 
 
-def priority_for(type: str, risks, stage: str) -> str:
+def priority_for(type: str, risks, stage: str, partial: bool = False) -> str:
     """The priority of a report: a code from schema.URGENCIES.
 
     type is a code from schema.TYPES, risks are codes from schema.RISKS (the
-    risks the message states), stage is a code from schema.STAGES.
+    risks the message states), stage is a code from schema.STAGES, and partial
+    is True when the message itself says the fault is only partial.
     """
     if stage not in STAGES:
         raise ValueError(f"'{stage}' is not a journey stage. Allowed: {', '.join(STAGES)}")
@@ -79,5 +92,7 @@ def priority_for(type: str, risks, stage: str) -> str:
 
     levels = list(URGENCIES)  # the most urgent first
     default = PRIORITY_IN_STAGE.get(stage, {}).get(type, PRIORITY_BY_TYPE[type])
+    steps_down = 1 if partial and type in FAULT_TYPES else 0
     steps_up = len(set(risks))
-    return levels[max(levels.index(default) - steps_up, 0)]
+    position = levels.index(default) + steps_down - steps_up
+    return levels[min(max(position, 0), len(levels) - 1)]

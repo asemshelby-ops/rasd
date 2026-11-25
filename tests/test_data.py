@@ -3,7 +3,7 @@
 from collections import Counter
 
 from rasd.data import EXPECTED_STAGE, load_expected, load_reports
-from rasd.routing import OWNER_BY_TYPE, priority_for
+from rasd.routing import FAULT_TYPES, OWNER_BY_TYPE, priority_for
 from rasd.schema import STAGES
 from rasd.text import to_western_digits
 
@@ -71,7 +71,13 @@ def test_expected_priority_follows_the_teams_table_and_the_stated_risks():
     gives for the type and the risks written next to it."""
     for e in EXPECTED.values():
         if e.urgency is not None:
-            assert e.urgency == priority_for(e.type, e.risks, EXPECTED_STAGE), f"report {e.id}"
+            assert e.urgency == priority_for(e.type, e.risks, EXPECTED_STAGE, e.partial), f"report {e.id}"
+
+
+def test_some_expected_answers_are_partial_faults_and_only_faults_are_partial():
+    partial = [e for e in EXPECTED.values() if e.partial]
+    assert len(partial) >= 2
+    assert all(e.type in FAULT_TYPES for e in partial)
 
 
 def test_the_expected_answers_use_every_priority_level_and_every_kind_of_risk():
@@ -307,3 +313,31 @@ def test_the_new_priority_levels_are_accepted_and_the_old_lowest_level_is_not(tm
     assert expected_with_risks(tmp_path, "1,cleaning,room,907,normal,housekeeping,1,0,0,,").urgency == "normal"
     with pytest.raises(ValueError, match="urgency"):
         expected_with_risks(tmp_path, "1,cleaning,room,907,low,housekeeping,1,0,0,,")
+
+
+# --- the optional partial column ----------------------------------------------
+
+PARTIAL_HEAD = "id,type,loc_kind,loc_number,urgency,owner,incident,needs_confirmation,room_in_words,risks,partial,note\n"
+
+
+def expected_with_partial(tmp_path, row: str):
+    (tmp_path / "reports.csv").write_text(REPORTS_HEAD + f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n', encoding="utf-8-sig")
+    (tmp_path / "expected.csv").write_text(PARTIAL_HEAD + row + "\n", encoding="utf-8-sig")
+    return load_holdout(tmp_path)[1][1]
+
+
+def test_partial_is_read_from_its_column(tmp_path):
+    assert expected_with_partial(tmp_path, "1,ac,room,907,medium,maintenance,1,0,0,,1,").partial is True
+    assert expected_with_partial(tmp_path, "1,ac,room,907,urgent,maintenance,1,0,0,,0,").partial is False
+    assert expected_with_partial(tmp_path, "1,ac,room,907,urgent,maintenance,1,0,0,,,").partial is False
+
+
+def test_a_file_without_a_partial_column_has_no_partial_faults(tmp_path):
+    assert expected_with_risks(tmp_path, "1,ac,room,907,urgent,maintenance,1,0,0,,").partial is False
+
+
+def test_a_wrong_value_in_the_partial_column_names_the_file_the_report_and_the_column(tmp_path):
+    with pytest.raises(ValueError) as problem:
+        expected_with_partial(tmp_path, "1,ac,room,907,medium,maintenance,1,0,0,,half,")
+    message = str(problem.value)
+    assert "expected.csv" in message and "report 1" in message and "partial" in message

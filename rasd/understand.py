@@ -23,9 +23,19 @@ import anthropic
 import pydantic
 from dotenv import load_dotenv
 
-from rasd.numbers import TEEN_ENDINGS, contains_number, contains_words, spoken_number, teen_spellings
 from rasd import routing
-from rasd.routing import DEADLINE_MINUTES, OWNER_BY_TYPE, priority_for
+from rasd.numbers import (
+    HUNDRED_ENDINGS,
+    TEEN_ENDINGS,
+    as_written,
+    contains_number,
+    contains_words,
+    contains_words_in_order,
+    hundred_spellings,
+    spoken_number,
+    teen_spellings,
+)
+from rasd.routing import ACKNOWLEDGE_MINUTES, DEADLINE_MINUTES, FAULT_TYPES, OWNER_BY_TYPE, priority_for
 from rasd.schema import CONFIDENCES, LOCATION_KINDS, RISKS, TYPES
 from rasd.text import to_western_digits
 
@@ -50,6 +60,9 @@ NUMBERED_PLACES = ("room", "elevator", "floor")
 # The dialect words for 11 to 19, one line per number: "- 12: اثنعش، ثنعش، طنعش، ...".
 # The list comes from numbers.py, so our parser and the model know the same words.
 TEEN_TABLE = "\n".join(f"- {number}: {'، '.join(words)}" for number, words in teen_spellings().items())
+# The same for the hundreds: "- 600: ستمية".
+HUNDRED_TABLE = "\n".join(f"- {number}: {'، '.join(words)}" for number, words in hundred_spellings().items())
+OTHER_HUNDRED_ENDINGS = "، ".join(as_written(ending) for ending in HUNDRED_ENDINGS[1:])
 
 # Rule for this prompt: never paste benchmark reports or their room numbers in
 # here as examples. tests/test_understand.py checks it.
@@ -108,6 +121,10 @@ the number out from how the word sounds:
 {TEEN_TABLE}
 These words may end in {"، ".join(TEEN_ENDINGS[1:])} instead of {TEEN_ENDINGS[0]}: \
 "خمسطعش" and "خمستاشر" are both 15.
+Each hundred is said as one word too. Find the word in this list in the same way:
+{HUNDRED_TABLE}
+From 300 on, these words may end in {OTHER_HUNDRED_ENDINGS} instead of \
+{as_written(HUNDRED_ENDINGS[0])}, and the last letter ة may be written ه.
 If the speaker corrects the number, use the number they end with.
 Other numbers in the message, such as counts, times and durations, are not the location.
 
@@ -121,11 +138,20 @@ symptom a pilgrim has
 - time_limit: the message gives a time that is running out, such as the group \
 leaving soon, a flight, or a rite the pilgrim will miss
 - alone_or_lost: the message says a pilgrim is alone, lost, missing or cannot be reached
+- danger: the message says people are in immediate physical danger: trapped \
+somewhere (for example inside an elevator), or there is fire, smoke, sparks or a \
+burning smell
 In words, copy the exact words of the message that state the risk. If you cannot \
 point to such words, the risk is not stated, so do not add it. Heat, discomfort, a \
 long wait, a complaint or an angry pilgrim is not a risk on its own. Do not judge \
 how urgent the report is: the team's own table decides that from the type and \
 from these risks.
+
+partial_words - only for a fault (air conditioning, water, electricity, \
+elevator): the exact words of the message that say the fault is only partial, or \
+that the thing still works. For example a tap that drips while the water still \
+runs, or one socket out of several that stopped working. Leave it empty when the \
+message does not say so. Never decide by yourself that a fault is small.
 
 confidence:
 - high: the message states every field clearly
@@ -150,6 +176,7 @@ class Reading(pydantic.BaseModel):
     number_words: str
     location_number: str
     risks: list[Risk]
+    partial_words: str
     confidence: Literal[tuple(CONFIDENCES)]
 
 
@@ -172,6 +199,9 @@ class Understanding:
     number_words: str = ""  # the words the model read the number from
     risks: tuple[str, ...] = ()  # the risks the message states: codes from schema.RISKS
     risk_words: tuple[str, ...] = ()  # the words the model quoted for each risk, in the same order
+    partial: bool = False  # True when the message itself says the fault is only partial
+    partial_words: str = ""  # the words the model quoted for that
+    acknowledge_minutes: int | None = None  # minutes to say "I am on it"; only critical reports have this step
     input_tokens: int = 0  # what the call used, for the cost
     output_tokens: int = 0
     error: str | None = None  # for developers: why the model gave no answer
@@ -207,7 +237,10 @@ def build_report(
     for risk in reading.risks:
         quoted.setdefault(risk.kind, risk.words)
     risks = tuple(risk for risk in RISKS if risk in quoted)
-    urgency = priority_for(reading.type, risks, stage or routing.CURRENT_STAGE)
+    # A fault counts as partial only when the words the model quoted for it are really in the message.
+    says_partial = bool(reading.partial_words.strip()) and reading.type in FAULT_TYPES
+    partial = says_partial and contains_words_in_order(message, reading.partial_words)
+    urgency = priority_for(reading.type, risks, stage or routing.CURRENT_STAGE, partial)
 
     reasons = []
     if reading.type == "unclear":
@@ -218,8 +251,12 @@ def build_report(
         reasons.append("number_not_confirmed")
     # A risk counts even when its words are not found in the message, because the
     # higher priority is the safe side. But then a person must look at the report.
-    if any(not contains_words(message, quoted[risk]) for risk in risks):
+    if any(not contains_words_in_order(message, quoted[risk]) for risk in risks):
         reasons.append("risk_not_confirmed")
+    # A lower priority on words that are not in the message would be a guess: the
+    # default priority stays, and a person looks at the report.
+    if says_partial and not partial:
+        reasons.append("partial_not_confirmed")
     if reading.confidence == "low":
         reasons.append("low_confidence")
 
@@ -236,6 +273,9 @@ def build_report(
         number_words=reading.number_words,
         risks=risks,
         risk_words=tuple(quoted[risk] for risk in risks),
+        partial=partial,
+        partial_words=reading.partial_words if partial else "",
+        acknowledge_minutes=ACKNOWLEDGE_MINUTES.get(urgency),
         input_tokens=input_tokens,
         output_tokens=output_tokens,
     )

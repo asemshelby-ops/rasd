@@ -7,6 +7,13 @@ turns it into a report with a type, a room, an owner and a deadline. This code
 is the base of a live demo: it must be reliable, simple to explain, and easy
 for students to maintain.
 
+## Overnight run of 25 to 26 November 2026
+
+The owner set a six-stage overnight run. **`PROGRESS.md` says which stages are
+done and what comes next; read it first.** `QUESTIONS.md` lists the choices made
+without the owner. The notes below this section describe the state before that
+run and are updated in its last stage.
+
 ## Where the work stands
 
 Phase 1, steps 1 to 3 are done and unit-tested, and the step 4 benchmark covers
