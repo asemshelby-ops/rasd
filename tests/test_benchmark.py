@@ -14,7 +14,7 @@ import pytest
 
 import benchmark
 from benchmark import check_access, measure, run_benchmark
-from rasd.data import Expected, SampleReport
+from rasd.data import Expected, SampleReport, load_reports
 from rasd.understand import DEFAULT_MODEL, Understanding
 
 
@@ -208,9 +208,11 @@ GOOD_READING = {
     "location_kind": "room",
     "number_words": "",
     "location_number": "",
-    "urgency": "medium",
+    "risks": [],
     "confidence": "high",
 }
+MAIN = len(load_reports())  # how many main reports there are
+USAGE = {"input_tokens": 1000, "output_tokens": 100}  # what each offline answer says it used
 
 
 @pytest.fixture
@@ -239,7 +241,7 @@ def offline(monkeypatch, tmp_path):
                 "content": [{"type": "text", "text": json.dumps(GOOD_READING)}],
                 "stop_reason": "end_turn",
                 "stop_sequence": None,
-                "usage": {"input_tokens": 1000, "output_tokens": 100},
+                "usage": dict(USAGE),
             },
         )
 
@@ -255,14 +257,14 @@ def offline(monkeypatch, tmp_path):
     return SimpleNamespace(asked=asked, results=tmp_path / "results", comparison=tmp_path / "comparison")
 
 
-def test_the_command_reads_all_35_reports_prints_the_report_and_saves_it(offline, capsys):
+def test_the_command_reads_every_main_report_prints_the_report_and_saves_it(offline, capsys):
     benchmark.main([])
     printed = capsys.readouterr().out
-    assert offline.asked == [DEFAULT_MODEL] * 35
+    assert offline.asked == [DEFAULT_MODEL] * MAIN
     assert "تقرير اختبار الدقة - رصد" in printed
     assert "التكلفة التقريبية" in printed
     saved = offline.results / f"benchmark_{DEFAULT_MODEL}.txt"
-    assert "البلاغات: 35 (العربية 30، الأردو 5)" in saved.read_text(encoding="utf-8-sig")
+    assert "البلاغات: 42 (العربية 36، الأردو 6)" in saved.read_text(encoding="utf-8-sig")
     assert not offline.comparison.exists()
 
 
@@ -271,7 +273,7 @@ def test_the_command_reads_the_owners_holdout_reports_and_reports_them_separatel
     monkeypatch.setattr(benchmark, "load_holdout", lambda: holdout_set)
     benchmark.main([])
     printed = capsys.readouterr().out
-    assert len(offline.asked) == 37
+    assert len(offline.asked) == MAIN + 2
     second_part = printed.split("القسم الثاني")[1]
     assert "البلاغات: 2 (العربية 2، الأردو 0)" in second_part
     assert "held 1" not in printed
@@ -291,7 +293,7 @@ def test_a_mistake_in_the_holdout_files_stops_the_command_before_it_spends_anyth
 def test_compare_runs_both_models_on_the_same_reports_and_prints_the_gap(offline, capsys):
     benchmark.main(["--compare", "claude-sonnet-5-5"])
     printed = capsys.readouterr().out
-    assert offline.asked == [DEFAULT_MODEL] * 35 + ["claude-sonnet-5-5"] * 35
+    assert offline.asked == [DEFAULT_MODEL] * MAIN + ["claude-sonnet-5-5"] * MAIN
     assert f"النموذج: {DEFAULT_MODEL}" in printed
     assert "النموذج: claude-sonnet-5-5" in printed
     assert "المقارنة بين النموذجين" in printed
@@ -307,7 +309,7 @@ def test_compare_saves_a_lasting_record_of_both_runs(offline):
 
     record = json.loads((folder / "answers.json").read_text(encoding="utf-8"))
     assert [run["model"] for run in record["runs"]] == [DEFAULT_MODEL, "claude-sonnet-5-5"]
-    assert all(len(run["answers"]) == 35 for run in record["runs"])
+    assert all(len(run["answers"]) == MAIN for run in record["runs"])
     assert record["runs"][1]["answers"]["1"]["type"] == "water"
     assert record["recorded_at"]
 
@@ -340,8 +342,8 @@ def test_compare_does_not_store_the_answers_to_holdout_reports_in_the_record(off
     monkeypatch.setattr(benchmark, "load_holdout", lambda: holdout_set)
     benchmark.main(["--compare", "claude-sonnet-5-5"])
     record = json.loads((offline.comparison / "answers.json").read_text(encoding="utf-8"))
-    assert all(len(run["answers"]) == 35 for run in record["runs"])
-    assert len(offline.asked) == 74
+    assert all(len(run["answers"]) == MAIN for run in record["runs"])
+    assert len(offline.asked) == 2 * (MAIN + 2)
 
 
 def test_the_command_waits_and_asks_again_when_the_api_says_slow_down(monkeypatch, tmp_path, capsys):
@@ -377,4 +379,191 @@ def test_the_command_waits_and_asks_again_when_the_api_says_slow_down(monkeypatc
 
     benchmark.main([])
     assert "بلاغات لم يُجب عنها النموذج: 0" in capsys.readouterr().out
-    assert len(posts) == 35 + 4
+    assert len(posts) == MAIN + 4
+
+
+# --- the same model several times: --repeat -----------------------------------
+
+
+def test_repeat_reads_the_main_reports_that_many_times_and_prints_each_run(offline, capsys):
+    benchmark.main(["--repeat", "3"])
+    printed = capsys.readouterr().out
+    assert offline.asked == [DEFAULT_MODEL] * (3 * MAIN)
+    assert printed.count("تقرير اختبار الدقة - رصد") == 3
+    assert "التشغيل 1 من 3" in printed and "التشغيل 2 من 3" in printed and "التشغيل 3 من 3" in printed
+
+
+def test_repeat_prints_what_changed_between_the_runs(offline, capsys):
+    benchmark.main(["--repeat", "3"])
+    printed = capsys.readouterr().out
+    assert "الثبات بين التشغيلات: 3 تشغيلات (البلاغات الأساسية)" in printed
+    assert f"بلاغات تغيّرت أولويتها بين التشغيلات: 0 من {MAIN}" in printed
+    assert "التكلفة التقريبية لهذا التشغيل كله (3 تشغيلات)" in printed
+
+
+def test_repeat_saves_everything_it_printed_in_one_file(offline, capsys):
+    benchmark.main(["--repeat", "2"])
+    saved = (offline.results / f"benchmark_{DEFAULT_MODEL}.txt").read_text(encoding="utf-8-sig")
+    assert saved.count("تقرير اختبار الدقة - رصد") == 2
+    assert "الثبات بين التشغيلات: 2 تشغيلات (البلاغات الأساسية)" in saved
+
+
+def test_repeat_also_compares_the_holdout_reports_between_runs_without_their_text(offline, capsys, monkeypatch):
+    holdout_set = ([held(1), held(2)], {1: expected_answer(1), 2: expected_answer(2)})
+    monkeypatch.setattr(benchmark, "load_holdout", lambda: holdout_set)
+    benchmark.main(["--repeat", "2"])
+    printed = capsys.readouterr().out
+    assert len(offline.asked) == 2 * (MAIN + 2)
+    assert "الثبات بين التشغيلات: 2 تشغيلات (البلاغات المحجوبة)" in printed
+    assert "held 1" not in printed
+
+
+def test_one_cost_limit_covers_all_the_runs_of_a_repeat(offline, capsys, monkeypatch):
+    # 100,000 input tokens is 1 cent a report on the everyday model, so one pass over the
+    # main reports costs well under a dollar, and the dollar runs out during the third pass.
+    monkeypatch.setitem(USAGE, "input_tokens", 100_000)
+    monkeypatch.setitem(USAGE, "output_tokens", 0)
+    benchmark.main(["--repeat", "3"])
+    assert 2 * MAIN < len(offline.asked) < 3 * MAIN
+    assert len(offline.asked) == 101  # 1.00 dollar is not over the limit; the 101st report is
+    assert "توقف الاختبار لأن التكلفة تجاوزت الحد" in capsys.readouterr().out
+
+
+def test_one_run_prints_no_stability_section(offline, capsys):
+    benchmark.main([])
+    printed = capsys.readouterr().out
+    assert "الثبات بين التشغيلات" not in printed
+    assert "التشغيل 1 من 1" not in printed
+
+
+def test_repeat_needs_at_least_one_run(offline):
+    with pytest.raises(SystemExit):
+        benchmark.main(["--repeat", "0"])
+    assert offline.asked == []
+
+
+def test_repeat_cannot_be_combined_with_a_comparison(offline):
+    with pytest.raises(SystemExit):
+        benchmark.main(["--repeat", "2", "--compare", "claude-sonnet-5-5"])
+    assert offline.asked == []
+
+
+def test_the_benchmark_scores_with_the_stage_the_expected_answers_were_written_for(offline, capsys, monkeypatch):
+    """The live stage setting must not change benchmark results: during the Hajj days
+    a lost Nusuk card is critical, but the expected answers are written for the Makkah days."""
+    from rasd import routing
+
+    monkeypatch.setattr(routing, "CURRENT_STAGE", "hajj")
+    monkeypatch.setitem(GOOD_READING, "type", "nusuk_card")
+    benchmark.main([])
+    assert "الناتج «حرج»" not in capsys.readouterr().out
+
+
+# --- the second approved comparison: both models on the holdout reports only ----
+
+
+@pytest.fixture
+def with_holdout(offline, monkeypatch):
+    """The offline command, with three made-up holdout reports in place of data/holdout."""
+    holdout_set = ([held(1), held(2), held(3)], {i: expected_answer(i) for i in (1, 2, 3)})
+    monkeypatch.setattr(benchmark, "load_holdout", lambda: holdout_set)
+    return offline
+
+
+def test_compare_holdout_sends_only_the_holdout_reports_to_both_models(with_holdout):
+    benchmark.main(["--compare-holdout", "claude-sonnet-5-5"])
+    assert with_holdout.asked == [DEFAULT_MODEL] * 3 + ["claude-sonnet-5-5"] * 3
+
+
+def test_compare_holdout_prints_each_models_report_and_the_gap(with_holdout, capsys):
+    benchmark.main(["--compare-holdout", "claude-sonnet-5-5"])
+    printed = capsys.readouterr().out
+    assert f"النموذج: {DEFAULT_MODEL}" in printed and "النموذج: claude-sonnet-5-5" in printed
+    assert printed.count("البلاغات: 3 (العربية 3، الأردو 0)") == 2
+    assert "المقارنة بين النموذجين (البلاغات المحجوبة)" in printed
+    assert "البلاغات الأساسية" not in printed
+    assert "التكلفة التقريبية لهذا التشغيل كله (النموذجان معاً)" in printed
+
+
+def test_compare_holdout_never_prints_or_saves_words_from_the_holdout_reports(with_holdout, capsys, monkeypatch):
+    monkeypatch.setitem(GOOD_READING, "number_words", "كلمات من البلاغ")
+    monkeypatch.setitem(GOOD_READING, "location_number", "355")
+    monkeypatch.setitem(GOOD_READING, "risks", [{"kind": "sick", "words": "كلمات عن الخطر"}])
+    benchmark.main(["--compare-holdout", "claude-sonnet-5-5"])
+    everything = capsys.readouterr().out
+    for file in with_holdout.comparison.iterdir():
+        everything += file.read_text(encoding="utf-8-sig")
+    assert "held 1" not in everything
+    assert "كلمات من البلاغ" not in everything
+    assert "كلمات عن الخطر" not in everything
+
+
+def test_compare_holdout_saves_its_own_record(with_holdout):
+    benchmark.main(["--compare-holdout", "claude-sonnet-5-5"])
+    folder = with_holdout.comparison
+    assert sorted(file.name for file in folder.iterdir()) == [
+        f"holdout_answers.json",
+        f"holdout_benchmark_{DEFAULT_MODEL}.txt",
+        "holdout_benchmark_claude-sonnet-5-5.txt",
+        "holdout_comparison.txt",
+    ]
+    record = json.loads((folder / "holdout_answers.json").read_text(encoding="utf-8"))
+    assert [run["model"] for run in record["runs"]] == [DEFAULT_MODEL, "claude-sonnet-5-5"]
+    assert all(sorted(run["answers"]) == ["1", "2", "3"] for run in record["runs"])
+    assert record["runs"][0]["answers"]["1"]["urgency"] == "urgent"
+
+
+def test_compare_holdout_runs_although_the_first_comparison_is_recorded_and_leaves_it_alone(with_holdout):
+    with_holdout.comparison.mkdir()
+    first = with_holdout.comparison / "answers.json"
+    first.write_text("the record of the first comparison", encoding="utf-8")
+    benchmark.main(["--compare-holdout", "claude-sonnet-5-5"])
+    assert len(with_holdout.asked) == 6
+    assert first.read_text(encoding="utf-8") == "the record of the first comparison"
+
+
+def test_compare_holdout_refuses_when_there_are_no_holdout_reports_yet(offline):
+    with pytest.raises(SystemExit) as stop:
+        benchmark.main(["--compare-holdout", "claude-sonnet-5-5"])
+    assert "holdout" in str(stop.value)
+    assert offline.asked == []
+    assert not offline.comparison.exists()
+
+
+def test_compare_holdout_refuses_to_run_a_second_time(with_holdout):
+    benchmark.main(["--compare-holdout", "claude-sonnet-5-5"])
+    del with_holdout.asked[:]
+    with pytest.raises(SystemExit) as stop:
+        benchmark.main(["--compare-holdout", "claude-sonnet-5-5"])
+    assert "once" in str(stop.value)
+    assert with_holdout.asked == []
+
+
+def test_compare_holdout_refuses_a_model_with_no_known_price_before_spending_anything(with_holdout):
+    with pytest.raises(SystemExit) as stop:
+        benchmark.main(["--compare-holdout", "some-new-model"])
+    assert "rasd/cost.py" in str(stop.value)
+    assert with_holdout.asked == []
+
+
+def test_compare_holdout_needs_a_model_other_than_the_everyday_one(with_holdout):
+    with pytest.raises(SystemExit):
+        benchmark.main(["--compare-holdout", DEFAULT_MODEL])
+    assert with_holdout.asked == []
+
+
+def test_a_mistake_in_the_holdout_files_stops_compare_holdout_before_it_spends_anything(offline, monkeypatch):
+    def broken():
+        raise ValueError("holdout/expected.csv, report 3: the type is not valid.")
+
+    monkeypatch.setattr(benchmark, "load_holdout", broken)
+    with pytest.raises(SystemExit) as stop:
+        benchmark.main(["--compare-holdout", "claude-sonnet-5-5"])
+    assert "report 3" in str(stop.value)
+    assert offline.asked == []
+
+
+def test_the_two_comparisons_cannot_be_asked_for_together(with_holdout):
+    with pytest.raises(SystemExit):
+        benchmark.main(["--compare", "claude-sonnet-5-5", "--compare-holdout", "claude-sonnet-5-5"])
+    assert with_holdout.asked == []

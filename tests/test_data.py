@@ -2,17 +2,18 @@
 
 from collections import Counter
 
-from rasd.data import load_expected, load_reports
-from rasd.routing import OWNER_BY_TYPE
+from rasd.data import EXPECTED_STAGE, load_expected, load_reports
+from rasd.routing import OWNER_BY_TYPE, priority_for
+from rasd.schema import STAGES
 from rasd.text import to_western_digits
 
 REPORTS = load_reports()
 EXPECTED = load_expected()
 
 
-def test_there_are_30_arabic_and_5_urdu_reports():
+def test_there_are_36_arabic_and_6_urdu_reports():
     languages = Counter("ur" if r.lang == "ur" else "ar" for r in REPORTS)
-    assert languages == {"ar": 30, "ur": 5}
+    assert languages == {"ar": 36, "ur": 6}
 
 
 def test_arabic_reports_cover_saudi_and_palestinian_dialects():
@@ -55,6 +56,29 @@ def test_several_incidents_have_duplicate_reports():
 def test_expected_owner_follows_the_routing_table():
     for e in EXPECTED.values():
         assert e.owner == OWNER_BY_TYPE[e.type], f"report {e.id}"
+
+
+def test_the_expected_answers_are_written_for_one_known_stage_of_the_journey():
+    assert EXPECTED_STAGE in STAGES
+
+
+def test_every_expected_answer_lists_the_risks_its_message_states():
+    assert all(e.risks is not None for e in EXPECTED.values())
+
+
+def test_expected_priority_follows_the_teams_table_and_the_stated_risks():
+    """The expected priority is never typed by hand: it is what routing.priority_for
+    gives for the type and the risks written next to it."""
+    for e in EXPECTED.values():
+        if e.urgency is not None:
+            assert e.urgency == priority_for(e.type, e.risks, EXPECTED_STAGE), f"report {e.id}"
+
+
+def test_the_expected_answers_use_every_priority_level_and_every_kind_of_risk():
+    from rasd.schema import RISKS, URGENCIES
+
+    assert {e.urgency for e in EXPECTED.values() if e.urgency} == set(URGENCIES)
+    assert {risk for e in EXPECTED.values() for risk in e.risks} == set(RISKS)
 
 
 def test_some_reports_are_expected_to_need_supervisor_confirmation():
@@ -241,3 +265,45 @@ def test_reports_without_an_expected_file_are_an_error(tmp_path):
     (tmp_path / "reports.csv").write_text(REPORTS_HEAD + f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n', encoding="utf-8-sig")
     with pytest.raises(ValueError, match="expected.csv"):
         load_holdout(tmp_path)
+
+
+# --- the optional risks column -----------------------------------------------
+
+RISKS_HEAD = "id,type,loc_kind,loc_number,urgency,owner,incident,needs_confirmation,room_in_words,risks,note\n"
+
+
+def expected_with_risks(tmp_path, row: str):
+    (tmp_path / "reports.csv").write_text(REPORTS_HEAD + f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n', encoding="utf-8-sig")
+    (tmp_path / "expected.csv").write_text(RISKS_HEAD + row + "\n", encoding="utf-8-sig")
+    return load_holdout(tmp_path)[1][1]
+
+
+def test_risks_are_read_as_a_list_of_codes(tmp_path):
+    expected = expected_with_risks(tmp_path, "1,cleaning,room,907,urgent,housekeeping,1,0,0,elderly sick,")
+    assert expected.risks == ("elderly", "sick")
+
+
+def test_an_empty_risks_cell_means_the_message_states_no_risk(tmp_path):
+    expected = expected_with_risks(tmp_path, "1,cleaning,room,907,normal,housekeeping,1,0,0,,")
+    assert expected.risks == ()
+
+
+def test_a_file_without_a_risks_column_has_no_risk_information(tmp_path):
+    folder = holdout_folder(
+        tmp_path, f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n', "1,water,room,907,urgent,maintenance,1,0,0,\n"
+    )
+    assert load_holdout(folder)[1][1].risks is None
+
+
+def test_a_risk_that_does_not_exist_names_the_file_the_report_and_the_column(tmp_path):
+    with pytest.raises(ValueError) as problem:
+        expected_with_risks(tmp_path, "1,cleaning,room,907,medium,housekeeping,1,0,0,angry,")
+    message = str(problem.value)
+    assert "expected.csv" in message and "report 1" in message and "risks" in message
+
+
+def test_the_new_priority_levels_are_accepted_and_the_old_lowest_level_is_not(tmp_path):
+    assert expected_with_risks(tmp_path, "1,health,room,907,critical,pilgrim_affairs,1,0,0,,").urgency == "critical"
+    assert expected_with_risks(tmp_path, "1,cleaning,room,907,normal,housekeeping,1,0,0,,").urgency == "normal"
+    with pytest.raises(ValueError, match="urgency"):
+        expected_with_risks(tmp_path, "1,cleaning,room,907,low,housekeeping,1,0,0,,")

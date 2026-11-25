@@ -10,54 +10,81 @@ for students to maintain.
 ## Where the work stands
 
 Phase 1, steps 1 to 3 are done and unit-tested, and the step 4 benchmark covers
-everything in its list below. Built: `data/reports.csv` (35 fictional reports),
+everything in its list below. Built: `data/reports.csv` (42 fictional reports),
 `data/expected.csv`, `rasd/understand.py` (understanding function and prompt),
-`rasd/numbers.py` (dialect number parser), `rasd/incidents.py` (duplicate
-merging), `rasd/scoring.py`, `rasd/cost.py`, `benchmark.py`, and the empty
-holdout folder `data/holdout/`.
+`rasd/numbers.py` (dialect number parser), `rasd/routing.py` (the team's owner
+and priority tables), `rasd/incidents.py` (duplicate merging),
+`rasd/scoring.py`, `rasd/cost.py`, `benchmark.py`, and the holdout folder
+`data/holdout/`.
 
-**All measurements are from 25 November 2026** (table in `README.md`).
+**Priority is no longer judged by the model** (owner's decision, 25 November
+2026, after a field review). It comes from tables in `rasd/routing.py`: a
+default per type, changed by the journey stage, raised one level for every risk
+the message states. See "Agreed design". **This is a team decision based on the
+pilgrim's journey. It is not tuning to the test.** The expected answers were
+recomputed from the table: each row of `data/expected.csv` lists the risks its
+message states, and a unit test checks that the expected priority is exactly
+what the table gives for that type and those risks.
 
-The one-time comparison, with the prompt as it was then (full reports in
-`comparison/`):
+Seven reports (36 to 42) were added for the three new types, because the data
+tests require every type to be covered. They need the team's dialect review
+like the first 35.
 
-- `claude-haiku-5-5`: all fields right on 30 of 35; 1 confident mistake (an
-  urgency, not a place); spoken room numbers 11 of 13; grouping 32 of 35; about
-  $0.009 per run. Three runs that day gave 32, 30 and 30 of 35.
-- `claude-sonnet-5-5`: 35 of 35 on everything; about $0.13 per run.
+**Current measurement** (25 November 2026, `python benchmark.py --repeat 3` on
+`claude-haiku-5-5`, 42 reports): all fields right on 41, 39 and 39 of 42;
+confident mistakes 0, 0 and 1, never a place; priority right on 41, 41 and 40 of
+41; one report (10) changed priority between the runs; spoken room numbers 13,
+13 and 14 of 14; grouping 42 of 42 each time; about $0.016 per run.
 
-Then two fixes the owner approved were made: the prompt now shows the dialect
-words for 11 to 19 (generated from the tables in `rasd/numbers.py`), and a room
-number is confirmed when its exact digits are written in the message, even if
-the model's quote is not a copy. Three runs on `claude-haiku-5-5` after the
-fixes: all fields right on 35, 32 and 35 of 35; spoken room numbers 13 of 13 and
-grouping 35 of 35 in all three; confident mistakes 0, 2 and 0, never a place.
-The fixes were written after seeing these same reports, so this proves little
-about new messages. The larger model has not been run with the new prompt.
+**Open question for the owner: pilgrims trapped in an elevator.** The one
+confident mistake was report 10 (Urdu, pilgrims stuck in an elevator): in one
+run Haiku filed them under the risk `alone_or_lost`, which raised urgent to
+critical. Cause, found by measuring: that danger has no entry in the team's list
+of five risks, and `alone_or_lost` is the nearest one; the quoted words really
+are in the message, so our check passes. It happened in 4 of 66 calls on report
+10 and in 0 of 24 on the two Arabic wordings (reports 8 and 9). A narrower
+wording of that risk in the prompt was tried and made it worse (9 of 12), so it
+was not kept. Nothing was changed. The team decides whether trapped pilgrims
+should raise the priority.
 
-**Open question for the owner: urgency.** The two confident mistakes were
-urgency (reports 1 and 14). Cause, found by measuring: the urgency rule does not
-say whether a danger the message does not state (heat that stops sleep, a group
-leaving in an hour) counts as urgent, so Haiku decides either way with high
-confidence. Sent 12 times, report 1 came back urgent 5 times; report 14 came
-back medium once. Nothing was changed. Options put to the owner: make the rule
-explicit, or send the report to the supervisor when the model hesitates.
+Other things the owner was told and has not decided:
 
-In no benchmark run so far did a wrong place go unflagged.
+- Priority follows the type only, so a partial fault (report 29, an AC that
+  drips but cools; report 30, some corridor bulbs) is "urgent" like a full
+  outage, and sparks with a burning smell (report 22) stay "urgent".
+- Haiku misread the dialect word for 600 ("ستمية") in new report 40, in two of
+  three runs; our parser disagreed, so it was flagged. A table of hundreds in
+  the prompt, like the one for 11 to 19, was proposed and not built.
+- Defaults I chose that the team may change in `rasd/routing.py`: the three new
+  types are owned by `pilgrim_affairs`; `unclear` is `urgent`; the sample
+  deadline for `critical` is 5 minutes; `CURRENT_STAGE` is `makkah`.
+- A risk whose quoted words are not found in the message still counts (the
+  higher priority is the safe side) and the report goes to the supervisor.
+- The guide inside `data/holdout/` predates the priority change and was not
+  edited, because the owner said not to open that folder. The current rules for
+  writing holdout reports are in the main `README.md`.
 
-**Larger model.** The owner plans to use the larger model for the demo;
-`DEFAULT_MODEL` is still `claude-haiku-5-5` until the owner says to switch. The
-comparison on the 35 main reports ran once and is not repeated. The owner
-approved one more comparison of both models **on the holdout set only**, and
-only after the owner's holdout files exist. That command is not built yet:
-`benchmark.py --compare` refuses while `comparison/answers.json` exists. Build
-it and test it offline first, then run it once.
+**Older measurements** (35 reports, the model still judging priority; kept in
+`README.md` and `comparison/` for the record): the one-time comparison gave
+Haiku 30 of 35 and `claude-sonnet-5-5` 35 of 35; after the two number fixes
+Haiku gave 35, 32 and 35 of 35. They are not comparable with the current
+measurement.
 
-The owner has not written the holdout reports yet, so they have no results.
+**Larger model.** The owner plans to use the larger model for the demo.
+`DEFAULT_MODEL` stays `claude-haiku-5-5` until the holdout comparison has run
+(owner's decision). The larger model has not been run with the current prompt.
+The comparison on the main reports ran once and is not repeated. The owner
+approved one more: `python benchmark.py --compare-holdout claude-sonnet-5-5`,
+both models on the holdout reports only. The command is built and tested
+offline. It refuses to run while there are no holdout reports, and refuses a
+second run. Run it once, when the owner says the holdout files are in.
 
-Next: the owner's answer on urgency, the holdout comparison when the files
-exist, then step 5 (speech to text) when the owner says so. Do not start Phase 2
-until Phase 1 works and the owner says so.
+The owner's teammates will write the holdout reports. None existed on
+25 November 2026.
+
+Next: the holdout comparison when the files exist, the owner's answers above,
+then step 5 (speech to text) when the owner says so. Do not start Phase 2 until
+Phase 1 works and the owner says so.
 
 Confirmed by the owner on 25 November 2026:
 
@@ -78,6 +105,10 @@ Confirmed by the owner on 25 November 2026:
 - The benchmark never prints the text of holdout reports; `--compare MODEL`
   replaced `--model`; the benchmark retries up to 6 times when the API says
   slow down (the live system keeps 2).
+- The prompt lists the dialect words for 11 to 19, and a room number whose
+  exact digits are written in the message is confirmed.
+- Priority: the four levels, the per-type table, the journey stage and the five
+  risks, as written in "Agreed design".
 
 ## How to work
 
@@ -111,7 +142,7 @@ Confirmed by the owner on 25 November 2026:
   `superpowers:requesting-code-review`, and fix what it finds.
 - If a skill is not available in the session, tell the owner which one and
   continue without it. On 25 November 2026 `frontend-design` was not available;
-  the others were.
+  the others were. The owner then said: continue Phase 2 without it.
 
 ## Hard rules
 
@@ -119,13 +150,15 @@ Confirmed by the owner on 25 November 2026:
   after every benchmark run. Stop if any single run costs more than $1.
 - **Larger-model comparison: run it once only.** It was run on the 35 main
   reports on 25 November 2026. The owner approved exactly one more: both models
-  on the holdout set only, and not before the owner's holdout files exist.
-- **Holdout.** `data/holdout/reports.csv` and `data/holdout/expected.csv` are
-  written by the owner. Never open, print, search or copy them, including
-  through git (`diff`, `show`, `log -p`), and never load them in unit tests.
-  Only `benchmark.py` reads them, when it runs. Report their results
-  separately from the 35 main reports. Never use what a holdout run shows to
-  add examples to the prompt.
+  on the holdout set only (`--compare-holdout`), and not before the holdout
+  files exist.
+- **Holdout.** The folder `data/holdout/` belongs to the owner and teammates,
+  who write its reports and expected answers. Do not open the folder: never
+  list, open, print, search, copy or edit anything in it, including through git
+  (`diff`, `show`, `log -p`), and never load it in unit tests. Only
+  `benchmark.py` reads it, when it runs. Report its results separately from the
+  main reports. Never use what a holdout run shows to add examples to the
+  prompt.
 - **Secrets.** Never ask for a key in chat and never commit one. The Claude key
   is read from the environment variable `RASD_CLAUDE_KEY` (set in the cloud
   environment; on laptops it goes in the git-ignored `.env`). Pass it to the
@@ -151,8 +184,9 @@ Confirmed by the owner on 25 November 2026:
   both models read the same reports and the accuracy and cost gap is printed
   next to Haiku. Use structured output so the reply always parses.
 - **Understanding function** (step 2): input is the report text; output is
-  type, location (kind and number), urgency, owner, confidence. The model reads
-  the message; owner and deadline come from the tables in `rasd/routing.py`.
+  type, location (kind and number), priority, owner, confidence. The model reads
+  the message; owner, priority and deadline come from the tables in
+  `rasd/routing.py`.
   Reports are flagged "needs supervisor confirmation" when confidence is low,
   the location is missing, or the type is unclear. If the API fails or refuses,
   return a flagged report instead of crashing.
@@ -168,22 +202,37 @@ Confirmed by the owner on 25 November 2026:
   and thinking left on its default. Tests use the real SDK with only the network
   replaced (`httpx2.MockTransport`), so they need no key and cost nothing.
   Unit tests use made-up messages and room numbers, never the benchmark's.
-- **Urgency rule:** written in `README.md`; it is a first judgement that the
-  team may change.
+- **Priority** (the field and CSV column are named `urgency`): the model is not
+  asked for it. Four levels: `critical`, `urgent`, `medium`, `normal`.
+  `routing.priority_for` works it out in three steps. (1) The type's default,
+  from the team-editable `PRIORITY_BY_TYPE`: lost pilgrim or one who cannot
+  communicate, and sick pilgrim or stated health risk, are critical; lost Nusuk
+  card, AC or water outage, electricity or elevator fault are urgent; luggage
+  is medium; cleaning and gifts not received are normal. (2) The journey stage,
+  which the ops room sets by hand (`CURRENT_STAGE`: arrival, makkah, hajj,
+  departure): during the Hajj days a lost Nusuk card is critical, because the
+  card is needed to enter the holy sites and the transport. (3) Each risk the
+  message states explicitly raises it one level, up to critical: elderly, sick,
+  medication, a time limit such as a group moving soon, a pilgrim alone or
+  lost. The model reports each risk with the words of the message that state
+  it, and our code checks those words are in the message. The benchmark always
+  scores with `data.EXPECTED_STAGE`, not with the live stage.
 - **Duplicate merging** (step 3): same type, same place, within a configurable
   window becomes one incident with a message count. No location or unclear type
   never merges. A closed incident takes no more reports. `add_report` places one
   report as it arrives (for the live system); `group_reports` does a whole list
   (for the benchmark).
-- **Benchmark** (step 4): one command. Accuracy per field, Arabic (30) and Urdu
-  (5) shown separately, every wrong report listed with expected and actual,
+- **Benchmark** (step 4): one command. Accuracy per field, Arabic (36) and Urdu
+  (6) shown separately, every wrong report listed with expected and actual,
   duplicate-grouping score, measured cost and time. An empty cell in
   `expected.csv` means the field is not scored; `-` means no number expected.
   The report leads with the confident mistakes: reports that are wrong and were
   not sent to the supervisor, with wrong places counted on their own. The owner
   called this the number that matters most for the demo. The main reports and
-  the holdout reports are scored in separate sections. Everyday output goes to
-  `results/` (git-ignored); the one-time comparison is kept in `comparison/`.
+  the holdout reports are scored in separate sections. `--repeat N` runs N
+  times and prints what changed between the runs (priority, type, place, flag).
+  Everyday output goes to `results/` (git-ignored); the comparisons that run
+  once are kept in `comparison/`.
 - **Speech to text** (step 5): Claude takes no audio. Use OpenAI
   `gpt-4o-transcribe` (approved, pay-as-you-go, $0.006 per minute) and keep
   free local Whisper as an offline fallback. The benchmark runs both on the

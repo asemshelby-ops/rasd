@@ -1,15 +1,21 @@
-"""Scores the engine's answers against the expected answers and writes the Arabic report.
+"""Scores the engine's answers against the expected answers and writes the Arabic reports.
 
 Nothing in this file calls the AI model. benchmark.py does the calls and hands
-the answers to render() and render_comparison().
+the answers to the render functions:
+
+    render             one model on the main reports and, if there are any, the holdout reports
+    render_holdout     one model on the holdout reports alone
+    render_comparison  two models side by side on the same reports
+    render_stability   the same model run several times: what changed between the runs
 """
 
 from dataclasses import dataclass
+from itertools import zip_longest
 
 from rasd.cost import MAX_RUN_COST_USD, cost_usd
-from rasd.data import NO_NUMBER, Expected, SampleReport
+from rasd.data import EXPECTED_STAGE, NO_NUMBER, Expected, SampleReport
 from rasd.incidents import MERGE_WINDOW_MINUTES, group_reports
-from rasd.schema import FLAG_REASONS, LOCATION_KINDS, OWNERS, TYPES, URGENCIES
+from rasd.schema import FLAG_REASONS, LOCATION_KINDS, OWNERS, RISKS, STAGES, TYPES, URGENCIES, location_label
 from rasd.understand import Understanding
 
 # The scored fields, in the order they are printed, with their Arabic names.
@@ -39,7 +45,10 @@ CAUGHT_MISTAKE = "أُحيل للمشرف"  # wrong, but the supervisor was aske
 NEEDLESS_REFERRAL = "إحالة بلا داعٍ"  # understood correctly, but sent to the supervisor anyway
 
 MAIN_TITLE = "======== القسم الأول: البلاغات الأساسية (كتبها المساعد الآلي) ========"
-HOLDOUT_TITLE = "======== القسم الثاني: البلاغات المحجوبة (كتبها مالك المشروع) ========"
+HOLDOUT_TITLE = "======== القسم الثاني: البلاغات المحجوبة (كتبها مالك المشروع وفريقه) ========"
+HOLDOUT_ONLY_TITLE = "======== البلاغات المحجوبة (كتبها مالك المشروع وفريقه) ========"
+HOLDOUT_NOTE = "نصوص هذه البلاغات لا تُطبع هنا حتى تبقى اختباراً مستقلاً. ابحثوا برقم البلاغ في ملفكم."
+STAGE_LINE = f"مرحلة الرحلة في هذا الاختبار: {STAGES[EXPECTED_STAGE]}"
 
 RIGHT_TO_LEFT = "‏"  # invisible mark that makes a line display right to left
 
@@ -318,6 +327,17 @@ def _spoken_room_lines(t: Tally) -> list[str]:
     ]
 
 
+def _risks_read(actual: Understanding, show_text: bool) -> str:
+    """The risks the model read in a message, for example: (المخاطر التي قرأها النموذج: دواء «أدويتها»)."""
+    if not actual.risks:
+        return "(لم يقرأ النموذج أي خطر)"
+    parts = [
+        RISKS[risk] + (f" «{words}»" if show_text and words else "")
+        for risk, words in zip_longest(actual.risks, actual.risk_words, fillvalue="")
+    ]
+    return "(المخاطر التي قرأها النموذج: " + "، ".join(parts) + ")"
+
+
 def _wrong_report_lines(t: Tally, show_text: bool) -> list[str]:
     """Every report that is not fully right, with the expected and the actual value of each wrong field.
 
@@ -335,6 +355,8 @@ def _wrong_report_lines(t: Tally, show_text: bool) -> list[str]:
             line = f"  - {name}: المتوقع «{_shown(field, getattr(wanted, field))}»، الناتج «{_shown(field, getattr(actual, field))}»"
             if field == "loc_number" and actual.number_words and show_text:
                 line += f" (قرأه النموذج من: «{actual.number_words}»)"
+            if field == "urgency":
+                line += " " + _risks_read(actual, show_text)
             if field == "needs_confirmation" and actual.reasons:
                 line += " (السبب: " + "، ".join(FLAG_REASONS[reason] for reason in actual.reasons) + ")"
             lines.append(line)
@@ -380,16 +402,36 @@ def _set_lines(t: Tally, show_text: bool) -> list[str]:
     return lines
 
 
+def _cost_and_failure_lines(parts: list[Tally], held: Tally | None) -> list[str]:
+    """What the whole command cost and how long it took, and the reports the model did not answer."""
+    seconds = sum(t.run.seconds for t in parts)
+    count = sum(len(t.done) for t in parts)
+    lines = [
+        "",
+        "== التكلفة والزمن ==",
+        f"الوحدات النصية (tokens): {sum(t.run.input_tokens for t in parts)} داخلة "
+        f"و{sum(t.run.output_tokens for t in parts)} خارجة",
+        f"التكلفة التقريبية: {sum(t.run.cost for t in parts):.4f} دولار",
+        f"الزمن: {seconds:.1f} ثانية ({seconds / count if count else 0.0:.1f} ثانية للبلاغ في المتوسط)",
+    ]
+    failed = [(r, t) for t in parts for r in t.done if t.run.results[r.id].error]
+    lines.append(f"بلاغات لم يُجب عنها النموذج: {len(failed)}")
+    for r, t in failed:
+        origin = " (من المحجوبة)" if t is held else ""
+        lines.append(f"  - رقم {r.id}{origin}: {t.run.results[r.id].error}")
+    return lines
+
+
 def render(
     run: Run, reports: list[SampleReport], expected: dict[int, Expected], holdout: Holdout | None = None
 ) -> str:
     """The whole benchmark report of one model as Arabic text.
 
-    The main reports and the owner's holdout reports are scored separately.
+    The main reports and the holdout reports are scored separately.
     The words of the holdout reports are never printed.
     """
     main = tally(run, reports, expected)
-    lines = ["تقرير اختبار الدقة - رصد", f"النموذج: {run.model}", "", MAIN_TITLE]
+    lines = ["تقرير اختبار الدقة - رصد", f"النموذج: {run.model}", STAGE_LINE, "", MAIN_TITLE]
     lines += _set_lines(main, show_text=True)
 
     lines += ["", HOLDOUT_TITLE]
@@ -398,27 +440,26 @@ def render(
         lines.append("لا توجد بلاغات محجوبة بعد. توضع في المجلد data/holdout ثم يُعاد تشغيل الاختبار.")
     else:
         held = tally(holdout.run, holdout.reports, holdout.expected)
-        lines.append("نصوص هذه البلاغات لا تُطبع هنا حتى تبقى اختباراً مستقلاً. ابحثوا برقم البلاغ في ملفكم.")
+        lines.append(HOLDOUT_NOTE)
         lines += _set_lines(held, show_text=False)
 
-    parts = [main] + ([held] if held else [])
-    seconds = sum(t.run.seconds for t in parts)
-    count = sum(len(t.done) for t in parts)
-    lines += [
+    lines += _cost_and_failure_lines([main] + ([held] if held else []), held)
+    return _right_to_left(lines)
+
+
+def render_holdout(holdout: Holdout) -> str:
+    """The benchmark report of one model on the holdout reports alone, as Arabic text."""
+    held = tally(holdout.run, holdout.reports, holdout.expected)
+    lines = [
+        "تقرير اختبار الدقة - رصد",
+        f"النموذج: {holdout.run.model}",
+        STAGE_LINE,
         "",
-        "== التكلفة والزمن ==",
-        f"الوحدات النصية (tokens): {sum(t.run.input_tokens for t in parts)} داخلة "
-        f"و{sum(t.run.output_tokens for t in parts)} خارجة",
-        f"التكلفة التقريبية: {sum(t.run.cost for t in parts):.4f} دولار",
-        f"الزمن: {seconds:.1f} ثانية ({seconds / count if count else 0.0:.1f} ثانية للبلاغ في المتوسط)",
+        HOLDOUT_ONLY_TITLE,
+        HOLDOUT_NOTE,
     ]
-
-    failed = [(r, t) for t in parts for r in t.done if t.run.results[r.id].error]
-    lines.append(f"بلاغات لم يُجب عنها النموذج: {len(failed)}")
-    for r, t in failed:
-        origin = " (من المحجوبة)" if t is held else ""
-        lines.append(f"  - رقم {r.id}{origin}: {t.run.results[r.id].error}")
-
+    lines += _set_lines(held, show_text=False)
+    lines += _cost_and_failure_lines([held], held=None)
     return _right_to_left(lines)
 
 
@@ -440,11 +481,16 @@ def _side_by_side(name: str, small: tuple[int, int], large: tuple[int, int]) -> 
     return f"{name}: الأصغر {_fraction(*small)} | الأكبر {_fraction(*large)} | {_verdict(small[0], large[0])}"
 
 
-def render_comparison(small: Run, large: Run, reports: list[SampleReport], expected: dict[int, Expected]) -> str:
-    """The accuracy and cost gap between two models that read the same reports, as Arabic text."""
+def render_comparison(
+    small: Run, large: Run, reports: list[SampleReport], expected: dict[int, Expected], holdout: bool = False
+) -> str:
+    """The accuracy and cost gap between two models that read the same reports, as Arabic text.
+
+    holdout=True only changes the title: the reports are the holdout ones.
+    """
     a, b = tally(small, reports, expected), tally(large, reports, expected)
     lines = [
-        "======== المقارنة بين النموذجين (البلاغات الأساسية) ========",
+        f"======== المقارنة بين النموذجين ({_set_name(holdout)}) ========",
         f"الأصغر: {small.model}",
         f"الأكبر: {large.model}",
         "النموذجان قرآ البلاغات نفسها بالتعليمات نفسها.",
@@ -515,3 +561,78 @@ def render_comparison(small: Run, large: Run, reports: list[SampleReport], expec
 
 def _per_report(t: Tally) -> float:
     return t.run.seconds / len(t.done) if t.done else 0.0
+
+
+def _set_name(holdout: bool) -> str:
+    return "البلاغات المحجوبة" if holdout else "البلاغات الأساسية"
+
+
+# ---------------------------------------------------------------------------
+# The same model, several runs
+# ---------------------------------------------------------------------------
+
+# What is compared between runs: a title, how to read the value from an answer,
+# how to read the expected value (None = not scored), and how to print a value.
+_STABILITY_CHECKS = [
+    (
+        "بلاغات تغيّرت أولويتها بين التشغيلات",
+        lambda answer: answer.urgency,
+        lambda wanted: wanted.urgency,
+        lambda value: URGENCIES[value],
+    ),
+    (
+        "بلاغات تغيّر نوعها بين التشغيلات",
+        lambda answer: answer.type,
+        lambda wanted: wanted.type,
+        lambda value: TYPES[value],
+    ),
+    (
+        "بلاغات تغيّر مكانها (نوعه أو رقمه) بين التشغيلات",
+        lambda answer: (answer.loc_kind, answer.loc_number),
+        lambda wanted: (
+            None
+            if wanted.loc_kind is None
+            else (wanted.loc_kind, None if wanted.loc_number == NO_NUMBER else wanted.loc_number)
+        ),
+        lambda value: location_label(*value),
+    ),
+    (
+        "بلاغات تغيّرت إحالتها للمشرف بين التشغيلات",
+        lambda answer: answer.needs_confirmation,
+        lambda wanted: wanted.needs_confirmation,
+        lambda value: "نعم" if value else "لا",
+    ),
+]
+
+
+def render_stability(
+    runs: list[Run], reports: list[SampleReport], expected: dict[int, Expected], holdout: bool = False
+) -> str:
+    """What changed when the same model read the same reports several times, as Arabic text.
+
+    A report "changed" when its value was not the same in every run, whether or
+    not any of those values was right.
+    """
+    tallies = [tally(run, reports, expected) for run in runs]
+    in_every_run = [r for r in reports if all(r.id in run.results for run in runs)]
+    lines = [
+        f"======== الثبات بين التشغيلات: {len(runs)} تشغيلات ({_set_name(holdout)}) ========",
+        "كل الحقول معاً في كل تشغيل: "
+        + "، ".join(f"{sum(t.all_right.values())} من {len(t.done)}" for t in tallies),
+        "بلاغات فيها خطأ ولم تُحَل للمشرف في كل تشغيل: "
+        + "، ".join(str(len(t.with_outcome(CONFIDENT_MISTAKE))) for t in tallies),
+    ]
+    if len(in_every_run) < len(reports):
+        lines.append(
+            f"تنبيه: تشغيل واحد على الأقل لم يُكمل البلاغات، فالمقارنة على {len(in_every_run)} من {len(reports)} بلاغاً."
+        )
+    for title, value_of, wanted_value_of, shown in _STABILITY_CHECKS:
+        changed = [r for r in in_every_run if len({value_of(run.results[r.id]) for run in runs}) > 1]
+        lines.append(f"{title}: {len(changed)} من {len(in_every_run)}")
+        for r in changed:
+            line = f"  - البلاغ {r.id}: " + "، ".join(shown(value_of(run.results[r.id])) for run in runs)
+            wanted = wanted_value_of(expected[r.id])
+            if wanted is not None:
+                line += f" (المتوقع: {shown(wanted)})"
+            lines.append(line)
+    return _right_to_left(lines)

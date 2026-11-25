@@ -3,10 +3,12 @@
     report = understand("...", client)
 
 Who decides what:
-  - The AI model READS the message: type, place, number, urgency, confidence.
-  - Our tables in routing.py DECIDE the owner and the deadline.
-  - Our own code CHECKS the room number (numbers.py) and decides whether the
-    report needs the supervisor to confirm it.
+  - The AI model READS the message: type, place, number, the risks the message
+    states, and how confident it is.
+  - Our tables in routing.py DECIDE the owner, the priority and the deadline.
+    The model is never asked how urgent a report is.
+  - Our own code CHECKS the room number (numbers.py) and the words of each risk,
+    and decides whether the report needs the supervisor to confirm it.
 
 If the model cannot be reached, refuses, or gives no answer, the result is still
 a report: it goes to the supervisor, flagged, so that no message is ever lost.
@@ -22,8 +24,9 @@ import pydantic
 from dotenv import load_dotenv
 
 from rasd.numbers import TEEN_ENDINGS, contains_number, contains_words, spoken_number, teen_spellings
-from rasd.routing import DEADLINE_MINUTES, OWNER_BY_TYPE
-from rasd.schema import CONFIDENCES, LOCATION_KINDS, TYPES, URGENCIES
+from rasd import routing
+from rasd.routing import DEADLINE_MINUTES, OWNER_BY_TYPE, priority_for
+from rasd.schema import CONFIDENCES, LOCATION_KINDS, RISKS, TYPES
 from rasd.text import to_western_digits
 
 DEFAULT_MODEL = "claude-haiku-5-5"
@@ -44,16 +47,6 @@ NUMBERED_PLACES = ("room", "elevator", "floor")
 # What we ask the model
 # ---------------------------------------------------------------------------
 
-# The team's urgency rule. It is also written in README.md: change both together.
-URGENCY_RULE = """\
-- urgent: any one of these: danger to safety or health; an elderly or sick pilgrim \
-is affected; a pilgrim is about to miss a rite or their group's departure; many \
-people are affected at once (a whole floor, or an elevator)
-- medium: an essential service has stopped completely for one room or one pilgrim \
-(air conditioning, water, electricity, luggage, Nusuk card) and none of the urgent \
-conditions apply
-- low: everything else: cleaning, partial or minor faults, routine requests"""
-
 # The dialect words for 11 to 19, one line per number: "- 12: اثنعش، ثنعش، طنعش، ...".
 # The list comes from numbers.py, so our parser and the model know the same words.
 TEEN_TABLE = "\n".join(f"- {number}: {'، '.join(words)}" for number, words in teen_spellings().items())
@@ -72,15 +65,24 @@ worker to the wrong door. So when the message does not state something, leave it
 empty or answer unclear instead of guessing.
 
 type - what the problem is:
+- lost_pilgrim: a pilgrim is lost or missing, or cannot communicate (nobody \
+understands their language, or they cannot say who they are or where they stay)
+- health: a pilgrim is sick, hurt or in a medical emergency, and that is what the \
+message reports
 - nusuk_card: a pilgrim lost their Nusuk card (the Hajj permit card)
 - luggage: bags that did not arrive, or a missing bag
 - ac: a fault in the air conditioning
 - water: no water, or a fault in the water supply
 - cleaning: the room needs cleaning, towels or bed linen
 - power_elevator: an electricity fault (power, lights, sockets) or an elevator fault
+- gifts: gifts or hospitality items that pilgrims did not receive
 - unclear: the message does not say what the problem is, or it is none of the above
+When the message reports a fault or a loss and also mentions a sick or elderly \
+pilgrim, the type is the fault or the loss. Use health only when the pilgrim's \
+condition is itself what needs help.
 
-location_kind - where the problem is:
+location_kind - where the problem is. For a pilgrim who is lost or sick, it is \
+the place the message gives for that pilgrim, such as their room:
 - room: one guest room
 - elevator: an elevator
 - floor: a whole floor, or a shared part of one floor such as its corridor
@@ -109,8 +111,21 @@ These words may end in {"، ".join(TEEN_ENDINGS[1:])} instead of {TEEN_ENDINGS[0
 If the speaker corrects the number, use the number they end with.
 Other numbers in the message, such as counts, times and durations, are not the location.
 
-urgency:
-{URGENCY_RULE}
+risks - dangers that the message states in its own words. Most messages state \
+none, and then the list is empty. Add one entry for each kind below that the \
+message states:
+- elderly: the message says a pilgrim is old
+- sick: the message says a pilgrim is sick or hurt, or names an illness or a \
+symptom a pilgrim has
+- medication: the message mentions a pilgrim's medicine
+- time_limit: the message gives a time that is running out, such as the group \
+leaving soon, a flight, or a rite the pilgrim will miss
+- alone_or_lost: the message says a pilgrim is alone, lost, missing or cannot be reached
+In words, copy the exact words of the message that state the risk. If you cannot \
+point to such words, the risk is not stated, so do not add it. Heat, discomfort, a \
+long wait, a complaint or an angry pilgrim is not a risk on its own. Do not judge \
+how urgent the report is: the team's own table decides that from the type and \
+from these risks.
 
 confidence:
 - high: the message states every field clearly
@@ -118,16 +133,23 @@ confidence:
 """
 
 
+# One risk the message states: its kind, and the words of the message that state it.
+class Risk(pydantic.BaseModel):
+    kind: Literal[tuple(RISKS)]
+    words: str
+
+
 # What the model reads from one message. The API forces the reply into exactly
 # this shape (structured output), so it always parses. The allowed codes come
 # straight from schema.py. The model fills the fields from top to bottom, so it
 # quotes the number words before it converts them to digits.
+# There is no priority field: the model is not asked how urgent a report is.
 class Reading(pydantic.BaseModel):
     type: Literal[tuple(TYPES)]
     location_kind: Literal[tuple(LOCATION_KINDS)]
     number_words: str
     location_number: str
-    urgency: Literal[tuple(URGENCIES)]
+    risks: list[Risk]
     confidence: Literal[tuple(CONFIDENCES)]
 
 
@@ -141,13 +163,15 @@ class Understanding:
     type: str  # a code from schema.TYPES
     loc_kind: str  # a code from schema.LOCATION_KINDS
     loc_number: str | None  # digits, or None when the place has no number
-    urgency: str  # a code from schema.URGENCIES
+    urgency: str  # the priority: a code from schema.URGENCIES, worked out by routing.priority_for
     owner: str  # a code from schema.OWNERS, taken from routing.py
     deadline_minutes: int  # taken from routing.py (sample values for now)
     confidence: str  # a code from schema.CONFIDENCES
     needs_confirmation: bool  # True = the supervisor must confirm before it is trusted
     reasons: tuple[str, ...]  # why it is flagged: codes from schema.FLAG_REASONS
     number_words: str = ""  # the words the model read the number from
+    risks: tuple[str, ...] = ()  # the risks the message states: codes from schema.RISKS
+    risk_words: tuple[str, ...] = ()  # the words the model quoted for each risk, in the same order
     input_tokens: int = 0  # what the call used, for the cost
     output_tokens: int = 0
     error: str | None = None  # for developers: why the model gave no answer
@@ -165,12 +189,25 @@ def _number_is_confirmed(message: str, quote: str, number: str) -> bool:
     return contains_words(message, quote) and spoken_number(quote) == number
 
 
-def build_report(message: str, reading: Reading, input_tokens: int = 0, output_tokens: int = 0) -> Understanding:
-    """Applies our rules to the model's reading. No AI in here."""
+def build_report(
+    message: str, reading: Reading, input_tokens: int = 0, output_tokens: int = 0, stage: str | None = None
+) -> Understanding:
+    """Applies our rules to the model's reading. No AI in here.
+
+    stage is the stage of the journey (a code from schema.STAGES). When it is
+    not given, the one set in routing.py is used.
+    """
     kind = reading.location_kind
     number = "".join(to_western_digits(reading.location_number).split()) or None
     if kind not in NUMBERED_PLACES:
         number = None
+
+    # The risks the model says the message states: kind -> the words it quoted.
+    quoted = {}
+    for risk in reading.risks:
+        quoted.setdefault(risk.kind, risk.words)
+    risks = tuple(risk for risk in RISKS if risk in quoted)
+    urgency = priority_for(reading.type, risks, stage or routing.CURRENT_STAGE)
 
     reasons = []
     if reading.type == "unclear":
@@ -179,6 +216,10 @@ def build_report(message: str, reading: Reading, input_tokens: int = 0, output_t
         reasons.append("no_location")
     if number is not None and not _number_is_confirmed(message, reading.number_words, number):
         reasons.append("number_not_confirmed")
+    # A risk counts even when its words are not found in the message, because the
+    # higher priority is the safe side. But then a person must look at the report.
+    if any(not contains_words(message, quoted[risk]) for risk in risks):
+        reasons.append("risk_not_confirmed")
     if reading.confidence == "low":
         reasons.append("low_confidence")
 
@@ -186,13 +227,15 @@ def build_report(message: str, reading: Reading, input_tokens: int = 0, output_t
         type=reading.type,
         loc_kind=kind,
         loc_number=number,
-        urgency=reading.urgency,
+        urgency=urgency,
         owner=OWNER_BY_TYPE[reading.type],
-        deadline_minutes=DEADLINE_MINUTES[reading.urgency],
+        deadline_minutes=DEADLINE_MINUTES[urgency],
         confidence=reading.confidence,
         needs_confirmation=bool(reasons),
         reasons=tuple(reasons),
         number_words=reading.number_words,
+        risks=risks,
+        risk_words=tuple(quoted[risk] for risk in risks),
         input_tokens=input_tokens,
         output_tokens=output_tokens,
     )
@@ -240,8 +283,13 @@ def make_client(env_file: Path = PROJECT_DIR / ".env") -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=key, timeout=30.0, max_retries=2)
 
 
-def understand(message: str, client: anthropic.Anthropic, model: str = DEFAULT_MODEL) -> Understanding:
-    """Turns the text of one staff message into a report. Never raises on a model failure."""
+def understand(
+    message: str, client: anthropic.Anthropic, model: str = DEFAULT_MODEL, stage: str | None = None
+) -> Understanding:
+    """Turns the text of one staff message into a report. Never raises on a model failure.
+
+    stage is the stage of the journey; when it is not given, the one set in routing.py is used.
+    """
     if not message.strip():
         return _not_understood("the message is empty")
 
@@ -272,4 +320,4 @@ def understand(message: str, client: anthropic.Anthropic, model: str = DEFAULT_M
         return _not_understood("the model refused to read this message", *tokens)
     if reply.parsed_output is None:
         return _not_understood(f"the model gave no answer (stop reason: {reply.stop_reason})", *tokens)
-    return build_report(message, reply.parsed_output, *tokens)
+    return build_report(message, reply.parsed_output, *tokens, stage=stage)

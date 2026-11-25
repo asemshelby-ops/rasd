@@ -264,7 +264,7 @@ def test_the_window_can_be_changed_when_adding_one_report():
 
 
 def test_the_incident_is_as_urgent_as_its_most_urgent_message():
-    incident = group_reports(arrivals((0, report(urgency="low")), (5, report(urgency="urgent")), (9, report())))[0]
+    incident = group_reports(arrivals((0, report(urgency="normal")), (5, report(urgency="urgent")), (9, report())))[0]
     assert incident.urgency == "urgent"
 
 

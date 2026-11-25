@@ -13,7 +13,8 @@ import pytest
 from rasd.data import load_expected, load_reports
 from rasd.numbers import TEEN_ENDINGS, normalise, teen_spellings
 from rasd.routing import DEADLINE_MINUTES
-from rasd.schema import FLAG_REASONS, LOCATION_KINDS, TYPES, URGENCIES
+from rasd import routing
+from rasd.schema import FLAG_REASONS, LOCATION_KINDS, RISKS, TYPES
 from rasd.understand import EFFORT, SYSTEM_PROMPT, Reading, build_report, make_client, understand
 
 MESSAGE = "ما في موية في غرفة تسعمية وسبعة من الصبح"
@@ -26,11 +27,16 @@ def reading(**changes) -> Reading:
         location_kind="room",
         number_words="تسعمية وسبعة",
         location_number="907",
-        urgency="medium",
+        risks=[],
         confidence="high",
     )
     fields.update(changes)
     return Reading(**fields)
+
+
+def risk(kind: str, words: str) -> dict:
+    """One risk as the model reports it: its kind and the words of the message that state it."""
+    return {"kind": kind, "words": words}
 
 
 # --- build_report: our own rules on top of what the model read -------------
@@ -39,7 +45,8 @@ def reading(**changes) -> Reading:
 def test_a_clear_reading_becomes_a_report_that_needs_no_confirmation():
     report = build_report(MESSAGE, reading())
     assert (report.type, report.loc_kind, report.loc_number) == ("water", "room", "907")
-    assert report.urgency == "medium"
+    assert report.urgency == "urgent"  # the team's default for a water outage
+    assert report.risks == ()
     assert report.needs_confirmation is False
     assert report.reasons == ()
 
@@ -50,8 +57,101 @@ def test_owner_comes_from_the_routing_table_not_from_the_model():
 
 
 def test_deadline_comes_from_the_routing_table():
-    report = build_report(MESSAGE, reading(urgency="urgent"))
-    assert report.deadline_minutes == DEADLINE_MINUTES["urgent"]
+    assert build_report(MESSAGE, reading()).deadline_minutes == DEADLINE_MINUTES["urgent"]
+    assert build_report(MESSAGE, reading(type="cleaning")).deadline_minutes == DEADLINE_MINUTES["normal"]
+
+
+# --- priority: the team's tables and the risks the message states -----------
+# The model is not asked how urgent a report is. It only says which risks the
+# message states, with the words that state them.
+
+RISKY_MESSAGE = "غرفة تسعمية وسبعة تبغى تنظيف وفيها حاجة كبيرة بالعمر وتعبانة وعلاجها ناقص"
+
+
+def test_the_model_is_never_asked_for_the_priority():
+    assert "urgency" not in Reading.model_fields
+    assert "priority" not in Reading.model_fields
+
+
+def test_priority_comes_from_the_teams_table_for_the_type():
+    assert build_report(MESSAGE, reading()).urgency == "urgent"
+    assert build_report(MESSAGE, reading(type="luggage")).urgency == "medium"
+    assert build_report(MESSAGE, reading(type="cleaning")).urgency == "normal"
+    assert build_report(MESSAGE, reading(type="health")).urgency == "critical"
+
+
+def test_a_risk_the_message_states_raises_the_priority_one_level():
+    report = build_report(RISKY_MESSAGE, reading(type="cleaning", risks=[risk("elderly", "حاجة كبيرة بالعمر")]))
+    assert report.urgency == "medium"
+    assert report.risks == ("elderly",)
+    assert report.needs_confirmation is False
+
+
+def test_two_different_risks_raise_the_priority_two_levels():
+    stated = [risk("elderly", "حاجة كبيرة بالعمر"), risk("sick", "تعبانة")]
+    report = build_report(RISKY_MESSAGE, reading(type="cleaning", risks=stated))
+    assert report.urgency == "urgent"
+    assert report.risks == ("elderly", "sick")
+
+
+def test_the_same_kind_of_risk_named_twice_counts_once():
+    stated = [risk("sick", "تعبانة"), risk("sick", "حاجة كبيرة بالعمر وتعبانة")]
+    report = build_report(RISKY_MESSAGE, reading(type="cleaning", risks=stated))
+    assert report.urgency == "medium"
+    assert report.risks == ("sick",)
+
+
+def test_priority_stops_at_critical_however_many_risks_there_are():
+    stated = [risk("elderly", "حاجة كبيرة بالعمر"), risk("sick", "تعبانة"), risk("medication", "علاجها")]
+    assert build_report(RISKY_MESSAGE, reading(risks=stated)).urgency == "critical"
+
+
+def test_risks_are_listed_in_the_order_of_the_schema_whatever_order_the_model_used():
+    stated = [risk("medication", "علاجها"), risk("elderly", "حاجة كبيرة بالعمر")]
+    report = build_report(RISKY_MESSAGE, reading(type="cleaning", risks=stated))
+    assert report.risks == ("elderly", "medication")
+    assert report.risk_words == ("حاجة كبيرة بالعمر", "علاجها")
+
+
+def test_the_deadline_follows_the_priority_after_the_risks_are_counted():
+    report = build_report(RISKY_MESSAGE, reading(type="cleaning", risks=[risk("elderly", "حاجة كبيرة بالعمر")]))
+    assert report.deadline_minutes == DEADLINE_MINUTES["medium"]
+
+
+def test_a_risk_whose_words_are_not_in_the_message_still_counts_but_goes_to_the_supervisor():
+    # The message says nothing about a sick pilgrim. We keep the higher priority,
+    # which is the safe side, and ask a person to look.
+    report = build_report(MESSAGE, reading(type="cleaning", risks=[risk("sick", "حاج مريض")]))
+    assert report.urgency == "medium"
+    assert report.risks == ("sick",)
+    assert report.needs_confirmation is True
+    assert report.reasons == ("risk_not_confirmed",)
+
+
+def test_a_risk_with_no_words_goes_to_the_supervisor():
+    report = build_report(RISKY_MESSAGE, reading(type="cleaning", risks=[risk("elderly", "")]))
+    assert report.reasons == ("risk_not_confirmed",)
+
+
+def test_one_unconfirmed_risk_among_confirmed_ones_is_enough_to_ask_the_supervisor():
+    stated = [risk("elderly", "حاجة كبيرة بالعمر"), risk("time_limit", "الباص بعد ساعة")]
+    report = build_report(RISKY_MESSAGE, reading(type="cleaning", risks=stated))
+    assert report.urgency == "urgent"
+    assert report.reasons == ("risk_not_confirmed",)
+
+
+def test_a_lost_nusuk_card_is_critical_when_the_stage_is_the_hajj_days():
+    lost_card = reading(type="nusuk_card")
+    assert build_report(MESSAGE, lost_card, stage="makkah").urgency == "urgent"
+    assert build_report(MESSAGE, lost_card, stage="hajj").urgency == "critical"
+
+
+def test_the_stage_is_the_one_set_in_the_routing_table_unless_another_is_given(monkeypatch):
+    lost_card = reading(type="nusuk_card")
+    monkeypatch.setattr(routing, "CURRENT_STAGE", "hajj")
+    assert build_report(MESSAGE, lost_card).urgency == "critical"
+    monkeypatch.setattr(routing, "CURRENT_STAGE", "departure")
+    assert build_report(MESSAGE, lost_card).urgency == "urgent"
 
 
 def test_number_is_stored_in_western_digits():
@@ -245,8 +345,23 @@ def test_understand_reads_the_answer_when_the_model_thinks_first():
     assert understand(MESSAGE, client).loc_number == "907"
 
 
+def test_understand_uses_the_stage_it_is_given():
+    lost_card = text_block(reading(type="nusuk_card").model_dump_json())
+    client = client_answering(lambda request: api_message([lost_card]))
+    assert understand(MESSAGE, client, stage="hajj").urgency == "critical"
+    assert understand(MESSAGE, client, stage="arrival").urgency == "urgent"
+
+
+def test_understand_returns_the_risks_the_model_reported():
+    answer = text_block(reading(type="cleaning", risks=[risk("elderly", "حاجة كبيرة بالعمر")]).model_dump_json())
+    report = understand(RISKY_MESSAGE, client_answering(lambda request: api_message([answer])))
+    assert (report.risks, report.urgency) == (("elderly",), "medium")
+
+
 def assert_sent_to_supervisor(report):
     assert report.type == "unclear"
+    assert report.urgency == "urgent"
+    assert report.risks == ()
     assert report.loc_kind == "none"
     assert report.owner == "supervisor"
     assert report.needs_confirmation is True
@@ -313,11 +428,11 @@ def test_the_model_can_only_answer_with_codes_from_the_schema():
     properties = Reading.model_json_schema()["properties"]
     assert properties["type"]["enum"] == list(TYPES)
     assert properties["location_kind"]["enum"] == list(LOCATION_KINDS)
-    assert properties["urgency"]["enum"] == list(URGENCIES)
+    assert Reading.model_json_schema()["$defs"]["Risk"]["properties"]["kind"]["enum"] == list(RISKS)
 
 
 def test_the_prompt_explains_every_code():
-    for code in [*TYPES, *LOCATION_KINDS, *URGENCIES]:
+    for code in [*TYPES, *LOCATION_KINDS, *RISKS]:
         assert code in SYSTEM_PROMPT, f"the prompt does not mention '{code}'"
 
 

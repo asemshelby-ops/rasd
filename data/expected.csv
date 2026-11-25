@@ -1,36 +1,43 @@
-﻿id,type,loc_kind,loc_number,urgency,owner,incident,needs_confirmation,room_in_words,note
-1,ac,room,412,medium,maintenance,1,0,0,
-2,ac,room,412,medium,maintenance,1,0,1,duplicate of 1; room said in Palestinian words
-3,ac,room,412,medium,maintenance,1,0,0,duplicate of 1; Arabic-Indic digits; the word room is missing
-4,nusuk_card,room,307,medium,pilgrim_affairs,2,0,1,
-5,luggage,room,618,medium,luggage_team,3,0,0,
-6,luggage,room,618,medium,luggage_team,3,0,1,duplicate of 5; room said digit by digit
-7,water,room,215,medium,maintenance,4,0,1,
-8,power_elevator,elevator,2,urgent,maintenance,5,0,0,people trapped
-9,power_elevator,elevator,2,urgent,maintenance,5,0,0,duplicate of 8; elevator number as an ordinal word
-10,power_elevator,elevator,2,urgent,maintenance,5,0,0,duplicate of 8 in Urdu
-11,cleaning,room,1104,low,housekeeping,6,0,1,
-12,power_elevator,room,509,medium,maintenance,7,0,0,
-13,ac,room,823,urgent,maintenance,8,0,1,elderly pilgrim with breathing difficulty
-14,nusuk_card,room,1012,urgent,pilgrim_affairs,9,0,1,group leaves for the Haram in an hour
-15,unclear,none,-,,supervisor,10,1,0,no problem and no place stated; urgency not scored
-16,ac,none,-,medium,maintenance,11,1,0,no room given
-17,water,floor,5,urgent,maintenance,12,0,0,whole floor affected
-18,water,floor,5,urgent,maintenance,12,0,0,duplicate of 17
-19,ac,room,726,medium,maintenance,13,0,0,
-20,luggage,room,1205,medium,luggage_team,14,0,1,room said as twelve-zero-five; two bags is a distractor
-21,cleaning,room,304,low,housekeeping,15,0,0,Arabic-Indic digits
-22,power_elevator,room,931,urgent,maintenance,16,0,1,sparks and burning smell
-23,nusuk_card,room,202,medium,pilgrim_affairs,17,,0,speaker corrects the room from 220 to 202; flag not scored
-24,ac,room,412,medium,maintenance,18,0,0,same room and type as 1 but three hours later: a new incident
-25,water,room,716,medium,maintenance,19,0,1,
-26,cleaning,room,716,low,housekeeping,20,0,0,same room as 25 but a different type: a separate incident
-27,luggage,room,1418,medium,luggage_team,21,0,0,
-28,power_elevator,elevator,4,urgent,maintenance,22,0,0,elderly pilgrims forced to use the stairs
-29,ac,room,1107,low,maintenance,23,0,1,partial fault: still cooling
-30,power_elevator,floor,3,low,maintenance,24,0,0,minor fault: some corridor bulbs
-31,water,,,medium,maintenance,25,1,0,room number forgotten; location not scored
-32,cleaning,room,512,low,housekeeping,26,0,0,
-33,power_elevator,room,1502,urgent,maintenance,27,0,1,medicine for a diabetic pilgrim at risk
-34,nusuk_card,room,908,medium,pilgrim_affairs,28,0,0,
-35,luggage,room,640,urgent,luggage_team,29,0,1,her medicine is in the missing bag
+﻿id,type,loc_kind,loc_number,urgency,owner,incident,needs_confirmation,room_in_words,risks,note
+1,ac,room,412,urgent,maintenance,1,0,0,,heat and no sleep are not a stated risk
+2,ac,room,412,urgent,maintenance,1,0,1,,duplicate of 1; room said in Palestinian words
+3,ac,room,412,urgent,maintenance,1,0,0,,duplicate of 1; Arabic-Indic digits; the word room is missing
+4,nusuk_card,room,307,urgent,pilgrim_affairs,2,0,1,,
+5,luggage,room,618,medium,luggage_team,3,0,0,,
+6,luggage,room,618,medium,luggage_team,3,0,1,,duplicate of 5; room said digit by digit
+7,water,room,215,urgent,maintenance,4,0,1,,
+8,power_elevator,elevator,2,urgent,maintenance,5,0,0,,people trapped
+9,power_elevator,elevator,2,urgent,maintenance,5,0,0,,duplicate of 8; elevator number as an ordinal word
+10,power_elevator,elevator,2,urgent,maintenance,5,0,0,,duplicate of 8 in Urdu
+11,cleaning,room,1104,normal,housekeeping,6,0,1,,
+12,power_elevator,room,509,urgent,maintenance,7,0,0,,
+13,ac,room,823,critical,maintenance,8,0,1,elderly sick,elderly pilgrim with breathing difficulty
+14,nusuk_card,room,1012,critical,pilgrim_affairs,9,0,1,time_limit,group leaves for the Haram in an hour
+15,unclear,none,-,,supervisor,10,1,0,,no problem and no place stated; urgency not scored
+16,ac,none,-,urgent,maintenance,11,1,0,,no room given
+17,water,floor,5,urgent,maintenance,12,0,0,,whole floor affected; no stated risk
+18,water,floor,5,urgent,maintenance,12,0,0,,duplicate of 17
+19,ac,room,726,urgent,maintenance,13,0,0,,
+20,luggage,room,1205,medium,luggage_team,14,0,1,,room said as twelve-zero-five; two bags is a distractor
+21,cleaning,room,304,normal,housekeeping,15,0,0,,Arabic-Indic digits
+22,power_elevator,room,931,urgent,maintenance,16,0,1,,sparks and burning smell; no risk from the team's list is stated
+23,nusuk_card,room,202,urgent,pilgrim_affairs,17,,0,,speaker corrects the room from 220 to 202; flag not scored
+24,ac,room,412,urgent,maintenance,18,0,0,,same room and type as 1 but three hours later: a new incident
+25,water,room,716,urgent,maintenance,19,0,1,,
+26,cleaning,room,716,normal,housekeeping,20,0,0,,same room as 25 but a different type: a separate incident
+27,luggage,room,1418,medium,luggage_team,21,0,0,,
+28,power_elevator,elevator,4,critical,maintenance,22,0,0,elderly,elderly pilgrims forced to use the stairs
+29,ac,room,1107,urgent,maintenance,23,0,1,,"partial fault, still cooling; priority comes from the type"
+30,power_elevator,floor,3,urgent,maintenance,24,0,0,,"minor fault, some corridor bulbs; priority comes from the type"
+31,water,,,urgent,maintenance,25,1,0,,room number forgotten; location not scored
+32,cleaning,room,512,normal,housekeeping,26,0,0,,
+33,power_elevator,room,1502,critical,maintenance,27,0,1,sick medication,medicine for a diabetic pilgrim at risk
+34,nusuk_card,room,908,urgent,pilgrim_affairs,28,0,0,,
+35,luggage,room,640,urgent,luggage_team,29,0,1,medication,her medicine is in the missing bag
+36,lost_pilgrim,room,527,critical,pilgrim_affairs,30,0,0,elderly alone_or_lost,went out after dawn and did not come back; no phone
+37,lost_pilgrim,room,233,critical,pilgrim_affairs,31,0,0,alone_or_lost,did not return from the Haram; no phone
+38,lost_pilgrim,common_area,-,critical,pilgrim_affairs,32,0,0,,cannot communicate; standing at the reception desk
+39,health,room,816,critical,pilgrim_affairs,33,0,0,sick,fainted and fell
+40,health,room,675,critical,pilgrim_affairs,34,0,1,sick,chest pain; room said in Palestinian words
+41,gifts,room,1310,normal,pilgrim_affairs,35,0,0,,
+42,gifts,room,445,medium,pilgrim_affairs,36,0,0,time_limit,bus to the airport in two hours raises it one level

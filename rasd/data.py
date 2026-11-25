@@ -7,6 +7,8 @@ There are two sets of reports, in exactly the same format:
 Conventions in expected.csv:
   - an empty cell means "do not score this field for this report"
   - "-" in loc_number means "no number is expected"
+  - urgency is the priority level; it is written for the journey stage EXPECTED_STAGE
+  - risks (an optional column) lists the risks the message states, separated by spaces
 
 A mistake in a file stops the program with a message that names the file, the
 report number and the column. The messages never show the words of a report or
@@ -18,12 +20,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from rasd.schema import LOCATION_KINDS, OWNERS, TYPES, URGENCIES
+from rasd.schema import LOCATION_KINDS, OWNERS, RISKS, TYPES, URGENCIES
 from rasd.text import to_western_digits
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 HOLDOUT_DIR = DATA_DIR / "holdout"
 NO_NUMBER = "-"
+
+# The stage of the journey that the expected priorities are written for. The
+# benchmark always scores with this stage, whatever routing.CURRENT_STAGE says.
+EXPECTED_STAGE = "makkah"
 
 REPORT_COLUMNS = ("id", "sent_at", "lang", "text")
 EXPECTED_COLUMNS = (
@@ -52,6 +58,7 @@ class Expected:
     needs_confirmation: bool | None  # None = not scored
     room_in_words: bool
     note: str
+    risks: tuple[str, ...] | None = None  # the risks the message states; None = the file has no risks column
 
 
 def _name(path: Path) -> str:
@@ -141,6 +148,9 @@ def load_expected(path: Path = DATA_DIR / "expected.csv") -> dict[int, Expected]
             raise ValueError(f"{where}: the loc_number must be digits, or {NO_NUMBER} when no number is expected.")
         if row["incident"] and not row["incident"].isdigit():
             raise ValueError(f"{where}: the incident must be a whole number, or empty.")
+        risks = tuple(row["risks"].split()) if "risks" in row else None
+        if risks and not set(risks) <= set(RISKS):
+            raise ValueError(f"{where}: the risks are not valid. Allowed, separated by spaces: {', '.join(RISKS)}")
 
         expected[report_id] = Expected(
             id=report_id,
@@ -153,6 +163,7 @@ def load_expected(path: Path = DATA_DIR / "expected.csv") -> dict[int, Expected]
             needs_confirmation=_yes_no(row["needs_confirmation"], "needs_confirmation", where),
             room_in_words=bool(_yes_no(row["room_in_words"], "room_in_words", where)),
             note=row.get("note", ""),
+            risks=risks,
         )
     return expected
 

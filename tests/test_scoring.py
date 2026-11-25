@@ -10,7 +10,7 @@ import pytest
 from rasd.cost import cost_usd
 from rasd.data import Expected, SampleReport, load_expected, load_reports
 from rasd.incidents import MERGE_WINDOW_MINUTES
-from rasd.scoring import Holdout, Run, render, render_comparison, score
+from rasd.scoring import Holdout, Run, render, render_comparison, render_holdout, render_stability, score
 from rasd.understand import Understanding, understand
 
 
@@ -78,7 +78,7 @@ def test_each_wrong_field_scores_false_on_its_own():
 def test_an_empty_expected_cell_is_not_scored():
     result = score(
         expected(loc_kind=None, loc_number=None, urgency=None, needs_confirmation=None),
-        answer(loc_kind="floor", loc_number="6", urgency="low", needs_confirmation=True),
+        answer(loc_kind="floor", loc_number="6", urgency="normal", needs_confirmation=True),
     )
     assert result["loc_kind"] is None
     assert result["loc_number"] is None
@@ -113,7 +113,7 @@ def test_report_shows_accuracy_per_field_for_all_arabic_and_urdu():
 def test_fields_that_are_not_scored_are_left_out_of_the_count():
     reports = [sample(1), sample(2)]
     table = {1: expected(1), 2: expected(2, urgency=None)}
-    text = render(run_of({1: answer(), 2: answer(urgency="low")}), reports, table)
+    text = render(run_of({1: answer(), 2: answer(urgency="normal")}), reports, table)
     assert "الأولوية: الكل 1 من 1 (100%)" in text
 
 
@@ -193,9 +193,9 @@ def test_the_report_can_be_built_for_the_real_reports_even_when_nothing_was_unde
     reports, table = load_reports(), load_expected()
     results = {r.id: understand("", client=None) for r in reports}  # an empty message never reaches the model
     text = render(run_of(results), reports, table)
-    assert "البلاغات: 35 (العربية 30، الأردو 5)" in text
-    assert "بلاغات لم يُجب عنها النموذج: 35" in text
-    assert "رقم الغرفة صحيح: 0 من 13 (0%)" in text
+    assert "البلاغات: 42 (العربية 36، الأردو 6)" in text
+    assert "بلاغات لم يُجب عنها النموذج: 42" in text
+    assert "رقم الغرفة صحيح: 0 من 14 (0%)" in text
 
 
 # --- cost -----------------------------------------------------------------
@@ -245,7 +245,7 @@ def test_a_wrong_kind_of_place_counts_as_a_wrong_place():
 
 
 def test_a_wrong_urgency_that_was_not_flagged_is_a_confident_mistake_but_not_a_wrong_place():
-    text = render(run_of({1: answer(urgency="low")}), [sample(1)], {1: expected(1)})
+    text = render(run_of({1: answer(urgency="normal")}), [sample(1)], {1: expected(1)})
     section = confident_section(text)
     assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 1 من 1" in section
     assert "منها بمكان خاطئ (نوعه أو رقمه): 0" in section
@@ -267,7 +267,7 @@ def test_a_correct_report_that_was_flagged_anyway_is_a_needless_referral_not_a_m
 
 def test_fields_that_are_not_scored_cannot_make_a_confident_mistake():
     table = {1: expected(1, loc_kind=None, loc_number=None, urgency=None, needs_confirmation=None)}
-    text = render(run_of({1: answer(loc_number="111", urgency="low")}), [sample(1)], table)
+    text = render(run_of({1: answer(loc_number="111", urgency="normal")}), [sample(1)], table)
     assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 0 من 1" in confident_section(text)
 
 
@@ -275,7 +275,7 @@ def test_each_wrong_report_is_labelled_with_what_happened_to_it():
     reports = [sample(1), sample(2, minutes=5), sample(3, minutes=9)]
     table = {1: expected(1), 2: expected(2, loc_number="355"), 3: expected(3, loc_number="601")}
     results = {
-        1: answer(urgency="low"),
+        1: answer(urgency="normal"),
         2: answer(loc_number="335", needs_confirmation=True, reasons=("number_not_confirmed",)),
         3: answer(loc_number="601", needs_confirmation=True, reasons=("low_confidence",)),
     }
@@ -358,7 +358,7 @@ def test_the_real_reports_get_a_grouping_score_even_when_nothing_was_understood(
     reports, table = load_reports(), load_expected()
     results = {r.id: understand("", client=None) for r in reports}
     section = grouping_section(render(run_of(results), reports, table))
-    assert "عدد الحوادث: المتوقع 29، الناتج 35" in section
+    assert "عدد الحوادث: المتوقع 36، الناتج 42" in section
     assert "حوادث مكررة جُمعت كاملة: 0 من 4" in section
 
 
@@ -549,4 +549,168 @@ def test_comparison_warns_when_a_run_stopped_at_the_cost_limit():
 
 def test_every_line_of_the_comparison_starts_right_to_left():
     text = render_comparison(*two_runs())
+    assert all(line.startswith("‏") for line in text.splitlines() if line)
+
+
+# --- priority: what the report shows when it is wrong ------------------------
+
+
+def test_report_names_the_stage_the_expected_priorities_are_written_for():
+    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)})
+    assert "مرحلة الرحلة في هذا الاختبار: أيام مكة" in text
+
+
+def test_a_wrong_priority_shows_the_risks_the_model_read_and_its_words():
+    read = answer(urgency="urgent", risks=("elderly", "medication"), risk_words=("ختيارة", "علاجها"))
+    text = render(run_of({1: read}), [sample(1)], {1: expected(1)})
+    assert "الأولوية: المتوقع «متوسط»، الناتج «عاجل»" in text
+    assert "(المخاطر التي قرأها النموذج: حاج كبير في السن «ختيارة»، دواء «علاجها»)" in text
+
+
+def test_a_wrong_priority_says_so_when_the_model_read_no_risk():
+    text = render(run_of({1: answer(urgency="normal")}), [sample(1)], {1: expected(1)})
+    assert "الأولوية: المتوقع «متوسط»، الناتج «عادي» (لم يقرأ النموذج أي خطر)" in text
+
+
+def test_a_wrong_priority_in_a_holdout_report_shows_the_risks_without_their_words():
+    wrong = {
+        1: answer(urgency="urgent", risks=("elderly",), risk_words=("كلمات محجوبة",)),
+        2: answer(type="ac"),
+        3: answer(loc_number="355"),
+    }
+    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)}, holdout=a_holdout(wrong))
+    assert "(المخاطر التي قرأها النموذج: حاج كبير في السن)" in holdout_part(text)
+    assert "كلمات محجوبة" not in text
+
+
+def test_the_new_level_names_are_printed_in_arabic():
+    text = render(run_of({1: answer(urgency="critical")}), [sample(1)], {1: expected(1, urgency="normal")})
+    assert "الأولوية: المتوقع «عادي»، الناتج «حرج»" in text
+
+
+# --- a report for the holdout reports alone ---------------------------------
+
+
+def test_the_holdout_only_report_has_the_holdout_section_and_no_main_section():
+    text = render_holdout(a_holdout())
+    assert "القسم الثاني: البلاغات المحجوبة" not in text  # there is no first section here
+    assert "البلاغات المحجوبة (كتبها مالك المشروع وفريقه)" in text
+    assert "البلاغات الأساسية" not in text
+    assert "البلاغات: 3 (العربية 2، الأردو 1)" in text
+    assert "النوع: الكل 2 من 3 (67%)" in text
+
+
+def test_the_holdout_only_report_never_prints_the_text_of_a_report():
+    wrong = {1: answer(), 2: answer(), 3: answer(loc_number="335", number_words="كلمات محجوبة")}
+    text = render_holdout(a_holdout(wrong))
+    assert "البلاغ 3 (الأردو، خطأ واثق)" in text
+    assert HIDDEN not in text and "كلمات محجوبة" not in text
+    assert "لا تُطبع" in text
+
+
+def test_the_holdout_only_report_shows_model_stage_cost_and_time():
+    text = render_holdout(a_holdout(seconds=6.0))
+    assert "النموذج: claude-haiku-5-5" in text
+    assert "مرحلة الرحلة في هذا الاختبار: أيام مكة" in text
+    assert "3000 داخلة و300 خارجة" in text
+    assert f"{cost_usd('claude-haiku-5-5', 3000, 300):.4f} دولار" in text
+    assert "6.0 ثانية (2.0 ثانية للبلاغ في المتوسط)" in text
+
+
+def test_every_line_of_the_holdout_only_report_starts_right_to_left():
+    assert all(line.startswith("‏") for line in render_holdout(a_holdout()).splitlines() if line)
+
+
+def test_the_comparison_can_be_titled_for_the_holdout_reports():
+    small, large, reports, table = two_runs()
+    assert "(البلاغات الأساسية)" in render_comparison(small, large, reports, table)
+    text = render_comparison(small, large, reports, table, holdout=True)
+    assert "(البلاغات المحجوبة)" in text and "(البلاغات الأساسية)" not in text
+
+
+# --- stability: the same reports read several times --------------------------
+
+
+def three_runs(second=None, third=None):
+    """Three runs over three reports. The first run is all right; the others may differ."""
+    reports = [sample(1), sample(2, minutes=30), sample(3, lang="ur", minutes=50)]
+    table = {1: expected(1), 2: expected(2, loc_number="355"), 3: expected(3, loc_number="601")}
+    right = {1: answer(), 2: answer(loc_number="355"), 3: answer(loc_number="601")}
+    runs = [run_of(dict(right)), run_of({**right, **(second or {})}), run_of({**right, **(third or {})})]
+    return runs, reports, table
+
+
+def test_stability_says_how_many_runs_it_compares():
+    text = render_stability(*three_runs())
+    assert "الثبات بين التشغيلات: 3 تشغيلات (البلاغات الأساسية)" in text
+
+
+def test_stability_shows_all_fields_right_and_confident_mistakes_for_each_run():
+    text = render_stability(*three_runs(second={2: answer(loc_number="335")}))
+    assert "كل الحقول معاً في كل تشغيل: 3 من 3، 2 من 3، 3 من 3" in text
+    assert "بلاغات فيها خطأ ولم تُحَل للمشرف في كل تشغيل: 0، 1، 0" in text
+
+
+def test_stability_counts_and_lists_the_reports_whose_priority_changed():
+    text = render_stability(*three_runs(second={2: answer(loc_number="355", urgency="critical")}))
+    assert "بلاغات تغيّرت أولويتها بين التشغيلات: 1 من 3" in text
+    assert "  - البلاغ 2: متوسط، حرج، متوسط (المتوقع: متوسط)" in text
+
+
+def test_stability_says_zero_when_nothing_changed():
+    text = render_stability(*three_runs())
+    assert "بلاغات تغيّرت أولويتها بين التشغيلات: 0 من 3" in text
+    assert "بلاغات تغيّر نوعها بين التشغيلات: 0 من 3" in text
+    assert "بلاغات تغيّر مكانها (نوعه أو رقمه) بين التشغيلات: 0 من 3" in text
+    assert "بلاغات تغيّرت إحالتها للمشرف بين التشغيلات: 0 من 3" in text
+    assert "  - البلاغ" not in text
+
+
+def test_a_priority_that_is_wrong_in_every_run_the_same_way_did_not_change():
+    always = {1: answer(urgency="urgent")}
+    runs, reports, table = three_runs(second=always, third=always)
+    runs[0].results[1] = answer(urgency="urgent")
+    assert "بلاغات تغيّرت أولويتها بين التشغيلات: 0 من 3" in render_stability(runs, reports, table)
+
+
+def test_stability_counts_a_changed_type():
+    text = render_stability(*three_runs(third={1: answer(type="ac")}))
+    assert "بلاغات تغيّر نوعها بين التشغيلات: 1 من 3" in text
+    assert "  - البلاغ 1: انقطاع الماء، انقطاع الماء، عطل تكييف (المتوقع: انقطاع الماء)" in text
+
+
+def test_stability_counts_a_changed_place():
+    text = render_stability(*three_runs(second={3: answer(loc_number="610")}, third={3: answer(loc_kind="floor", loc_number="6")}))
+    assert "بلاغات تغيّر مكانها (نوعه أو رقمه) بين التشغيلات: 1 من 3" in text
+    assert "  - البلاغ 3: غرفة 601، غرفة 610، دور 6 (المتوقع: غرفة 601)" in text
+
+
+def test_stability_counts_a_changed_referral_to_the_supervisor():
+    flagged = answer(needs_confirmation=True, reasons=("low_confidence",))
+    text = render_stability(*three_runs(second={1: flagged}))
+    assert "بلاغات تغيّرت إحالتها للمشرف بين التشغيلات: 1 من 3" in text
+    assert "  - البلاغ 1: لا، نعم، لا (المتوقع: لا)" in text
+
+
+def test_stability_leaves_out_the_expected_value_when_that_field_is_not_scored():
+    runs, reports, table = three_runs(second={1: answer(urgency="urgent")})
+    table[1] = expected(1, urgency=None)
+    assert "  - البلاغ 1: متوسط، عاجل، متوسط\n" in render_stability(runs, reports, table)
+
+
+def test_stability_only_compares_reports_that_every_run_read_and_says_so():
+    runs, reports, table = three_runs()
+    del runs[2].results[3]
+    runs[2].stopped_at_cost_limit = True
+    text = render_stability(runs, reports, table)
+    assert "بلاغات تغيّرت أولويتها بين التشغيلات: 0 من 2" in text
+    assert "تنبيه" in text
+
+
+def test_stability_for_holdout_reports_is_titled_so():
+    assert "(البلاغات المحجوبة)" in render_stability(*three_runs(), holdout=True)
+
+
+def test_every_line_of_the_stability_section_starts_right_to_left():
+    text = render_stability(*three_runs(second={2: answer(loc_number="355", urgency="critical")}))
     assert all(line.startswith("‏") for line in text.splitlines() if line)
