@@ -60,3 +60,184 @@ def test_expected_owner_follows_the_routing_table():
 def test_some_reports_are_expected_to_need_supervisor_confirmation():
     flagged = [e for e in EXPECTED.values() if e.needs_confirmation is True]
     assert len(flagged) >= 3
+
+
+# --- the owner's holdout folder --------------------------------------------
+# These tests write their own small files. They never open data/holdout itself:
+# what the owner writes there is only read by benchmark.py when it runs.
+
+import pytest
+
+from rasd.data import load_holdout
+
+REPORTS_HEAD = "id,sent_at,lang,text\n"
+EXPECTED_HEAD = "id,type,loc_kind,loc_number,urgency,owner,incident,needs_confirmation,room_in_words,note\n"
+SECRET = "نص سري لا يظهر في رسائل الخطأ"
+
+
+def holdout_folder(tmp_path, reports: str, expected: str):
+    (tmp_path / "reports.csv").write_text(REPORTS_HEAD + reports, encoding="utf-8-sig")
+    (tmp_path / "expected.csv").write_text(EXPECTED_HEAD + expected, encoding="utf-8-sig")
+    return tmp_path
+
+
+def test_there_is_no_holdout_when_the_folder_is_missing(tmp_path):
+    assert load_holdout(tmp_path / "nothing-here") is None
+
+
+def test_there_is_no_holdout_when_the_files_have_only_their_header_row(tmp_path):
+    assert load_holdout(holdout_folder(tmp_path, "", "")) is None
+
+
+def test_holdout_reports_and_expected_answers_are_loaded(tmp_path):
+    folder = holdout_folder(
+        tmp_path,
+        f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n2,2026-12-23 09:20,ur,"{SECRET}"\n',
+        "1,water,room,907,medium,maintenance,1,0,1,\n2,unclear,none,-,,supervisor,2,1,0,\n",
+    )
+    reports, expected = load_holdout(folder)
+    assert [(r.id, r.lang, r.text) for r in reports] == [(1, "ar-sa", SECRET), (2, "ur", SECRET)]
+    assert reports[0].sent_at.hour == 9 and reports[0].sent_at.minute == 15
+    assert (expected[1].type, expected[1].loc_number, expected[1].room_in_words) == ("water", "907", True)
+    assert (expected[2].urgency, expected[2].needs_confirmation) == (None, True)
+
+
+def test_holdout_reports_and_answers_must_have_the_same_report_numbers(tmp_path):
+    folder = holdout_folder(
+        tmp_path,
+        f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n2,2026-12-23 09:20,ar-sa,"{SECRET}"\n',
+        "1,water,room,907,medium,maintenance,1,0,0,\n3,water,room,355,medium,maintenance,2,0,0,\n",
+    )
+    with pytest.raises(ValueError) as problem:
+        load_holdout(folder)
+    assert "2" in str(problem.value) and "3" in str(problem.value)
+    assert SECRET not in str(problem.value)
+
+
+def test_blank_rows_left_by_excel_are_ignored(tmp_path):
+    folder = holdout_folder(
+        tmp_path,
+        f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n,,,\n',
+        "1,water,room,907,medium,maintenance,1,0,0,\n,,,,,,,,,\n",
+    )
+    reports, expected = load_holdout(folder)
+    assert len(reports) == 1 and list(expected) == [1]
+
+
+def test_a_time_with_seconds_is_accepted(tmp_path):
+    folder = holdout_folder(
+        tmp_path, f'1,2026-12-23 09:15:00,ar-sa,"{SECRET}"\n', "1,water,room,907,medium,maintenance,1,0,0,\n"
+    )
+    reports, _ = load_holdout(folder)
+    assert reports[0].sent_at.minute == 15
+
+
+def test_a_time_that_excel_rewrote_is_reported_with_the_report_number(tmp_path):
+    folder = holdout_folder(
+        tmp_path, f'7,23/12/2026 9:15,ar-sa,"{SECRET}"\n', "7,water,room,907,medium,maintenance,1,0,0,\n"
+    )
+    with pytest.raises(ValueError) as problem:
+        load_holdout(folder)
+    message = str(problem.value)
+    assert "reports.csv" in message and "report 7" in message and "2026-12-22 08:02" in message
+    assert SECRET not in message
+
+
+def test_an_empty_incident_cell_means_grouping_is_not_scored(tmp_path):
+    folder = holdout_folder(
+        tmp_path, f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n', "1,water,room,907,medium,maintenance,,0,0,\n"
+    )
+    _, expected = load_holdout(folder)
+    assert expected[1].incident is None
+
+
+def test_arabic_digits_in_the_expected_room_number_are_read_as_western_digits(tmp_path):
+    folder = holdout_folder(
+        tmp_path, f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n', "1,water,room,٩٠٧,medium,maintenance,1,0,0,\n"
+    )
+    _, expected = load_holdout(folder)
+    assert expected[1].loc_number == "907"
+
+
+def test_a_missing_column_is_named(tmp_path):
+    (tmp_path / "reports.csv").write_text(f'id,sent_at,text\n1,2026-12-23 09:15,"{SECRET}"\n', encoding="utf-8-sig")
+    (tmp_path / "expected.csv").write_text(
+        EXPECTED_HEAD + "1,water,room,907,medium,maintenance,1,0,0,\n", encoding="utf-8-sig"
+    )
+    with pytest.raises(ValueError) as problem:
+        load_holdout(tmp_path)
+    assert "reports.csv" in str(problem.value) and "lang" in str(problem.value)
+    assert SECRET not in str(problem.value)
+
+
+def test_the_note_column_may_be_left_out(tmp_path):
+    (tmp_path / "reports.csv").write_text(REPORTS_HEAD + f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n', encoding="utf-8-sig")
+    (tmp_path / "expected.csv").write_text(
+        "id,type,loc_kind,loc_number,urgency,owner,incident,needs_confirmation,room_in_words\n"
+        "1,water,room,907,medium,maintenance,1,0,0\n",
+        encoding="utf-8-sig",
+    )
+    _, expected = load_holdout(tmp_path)
+    assert expected[1].note == ""
+
+
+@pytest.mark.parametrize(
+    "row, word",
+    [
+        ("1,leak,room,907,medium,maintenance,1,0,0,", "type"),
+        ("1,water,rooom,907,medium,maintenance,1,0,0,", "loc_kind"),
+        ("1,water,room,907,soon,maintenance,1,0,0,", "urgency"),
+        ("1,water,room,907,medium,plumber,1,0,0,", "owner"),
+        ("1,water,room,,medium,maintenance,1,0,0,", "loc_number"),
+        ("1,water,room,nine,medium,maintenance,1,0,0,", "loc_number"),
+        ("1,water,room,907,medium,maintenance,first,0,0,", "incident"),
+        ("1,water,room,907,medium,maintenance,1,yes,0,", "needs_confirmation"),
+        ("1,water,room,907,medium,maintenance,1,0,yes,", "room_in_words"),
+    ],
+)
+def test_a_wrong_cell_in_the_expected_answers_names_the_file_the_report_and_the_column(tmp_path, row, word):
+    folder = holdout_folder(tmp_path, f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n', row + "\n")
+    with pytest.raises(ValueError) as problem:
+        load_holdout(folder)
+    message = str(problem.value)
+    assert "expected.csv" in message and "report 1" in message and word in message
+
+
+def test_a_report_number_used_twice_is_an_error(tmp_path):
+    folder = holdout_folder(
+        tmp_path,
+        f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n1,2026-12-23 09:20,ar-sa,"{SECRET}"\n',
+        "1,water,room,907,medium,maintenance,1,0,0,\n",
+    )
+    with pytest.raises(ValueError, match="more than once"):
+        load_holdout(folder)
+
+
+def test_a_report_number_that_is_not_a_number_is_an_error(tmp_path):
+    folder = holdout_folder(
+        tmp_path, f'A,2026-12-23 09:15,ar-sa,"{SECRET}"\n', "A,water,room,907,medium,maintenance,1,0,0,\n"
+    )
+    with pytest.raises(ValueError, match="id"):
+        load_holdout(folder)
+
+
+def test_an_unknown_language_is_an_error(tmp_path):
+    folder = holdout_folder(
+        tmp_path, f'1,2026-12-23 09:15,english,"{SECRET}"\n', "1,water,room,907,medium,maintenance,1,0,0,\n"
+    )
+    with pytest.raises(ValueError) as problem:
+        load_holdout(folder)
+    assert "lang" in str(problem.value) and "report 1" in str(problem.value)
+    assert SECRET not in str(problem.value)
+
+
+def test_a_report_with_no_text_is_an_error(tmp_path):
+    folder = holdout_folder(tmp_path, "1,2026-12-23 09:15,ar-sa,\n", "1,water,room,907,medium,maintenance,1,0,0,\n")
+    with pytest.raises(ValueError, match="text"):
+        load_holdout(folder)
+
+
+def test_reports_without_an_expected_file_are_an_error(tmp_path):
+    (tmp_path / "reports.csv").write_text(REPORTS_HEAD + f'1,2026-12-23 09:15,ar-sa,"{SECRET}"\n', encoding="utf-8-sig")
+    with pytest.raises(ValueError, match="expected.csv"):
+        load_holdout(tmp_path)

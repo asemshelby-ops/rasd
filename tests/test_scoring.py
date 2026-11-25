@@ -3,13 +3,14 @@
 All reports here are made up for the tests.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
 from rasd.cost import cost_usd
 from rasd.data import Expected, SampleReport, load_expected, load_reports
-from rasd.scoring import Run, render, score
+from rasd.incidents import MERGE_WINDOW_MINUTES
+from rasd.scoring import Holdout, Run, render, render_comparison, score
 from rasd.understand import Understanding, understand
 
 
@@ -48,8 +49,9 @@ def answer(**changes) -> Understanding:
     return Understanding(**fields)
 
 
-def sample(id=1, lang="ar-sa", text="ما في موية في الغرفة") -> SampleReport:
-    return SampleReport(id=id, sent_at=datetime(2026, 12, 22, 8, 0), lang=lang, text=text)
+def sample(id=1, lang="ar-sa", text="ما في موية في الغرفة", minutes=0) -> SampleReport:
+    sent_at = datetime(2026, 12, 22, 8, 0) + timedelta(minutes=minutes)
+    return SampleReport(id=id, sent_at=sent_at, lang=lang, text=text)
 
 
 # --- score ----------------------------------------------------------------
@@ -167,11 +169,6 @@ def test_report_shows_model_cost_and_time():
     assert "4.0 ثانية" in text and "2.0 ثانية للبلاغ" in text
 
 
-def test_report_says_duplicate_grouping_is_not_built_yet():
-    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)})
-    assert "تجميع البلاغات المكررة" in text and "لم يُبنَ بعد" in text
-
-
 def test_report_counts_the_reports_the_model_did_not_answer():
     failed = answer(type="unclear", needs_confirmation=True, reasons=("not_understood",), error="could not reach the API")
     text = render(run_of({1: answer(), 2: failed}), [sample(1), sample(2)], {1: expected(1), 2: expected(2)})
@@ -212,3 +209,344 @@ def test_cost_uses_the_price_of_each_model():
 def test_cost_of_an_unknown_model_is_an_error_not_a_guess():
     with pytest.raises(ValueError, match="rasd/cost.py"):
         cost_usd("some-new-model", 1000, 1000)
+
+
+# --- confident mistakes: wrong, and nobody was asked to check --------------
+
+
+def confident_section(text: str) -> str:
+    return text.split("== الأخطاء الواثقة")[1].split("\n\n")[0]
+
+
+def test_a_wrong_room_that_was_not_flagged_is_a_confident_mistake():
+    reports = [sample(1), sample(2, minutes=5)]
+    table = {1: expected(1), 2: expected(2, loc_number="355")}
+    text = render(run_of({1: answer(), 2: answer(loc_number="335")}), reports, table)
+    section = confident_section(text)
+    assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 1 من 2" in section
+    assert "أرقامها: 2" in section
+    assert "منها بمكان خاطئ (نوعه أو رقمه): 1" in section
+    assert "بلاغات فيها خطأ وأُحيلت للمشرف: 0" in section
+
+
+def test_a_wrong_room_that_was_flagged_is_not_a_confident_mistake():
+    flagged = answer(loc_number="335", needs_confirmation=True, reasons=("number_not_confirmed",))
+    text = render(run_of({1: flagged}), [sample(1)], {1: expected(1, loc_number="355")})
+    section = confident_section(text)
+    assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 0 من 1" in section
+    assert "أرقامها" not in section
+    assert "منها بمكان خاطئ (نوعه أو رقمه): 0" in section
+    assert "بلاغات فيها خطأ وأُحيلت للمشرف: 1" in section
+
+
+def test_a_wrong_kind_of_place_counts_as_a_wrong_place():
+    text = render(run_of({1: answer(loc_kind="floor")}), [sample(1)], {1: expected(1)})
+    assert "منها بمكان خاطئ (نوعه أو رقمه): 1" in confident_section(text)
+
+
+def test_a_wrong_urgency_that_was_not_flagged_is_a_confident_mistake_but_not_a_wrong_place():
+    text = render(run_of({1: answer(urgency="low")}), [sample(1)], {1: expected(1)})
+    section = confident_section(text)
+    assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 1 من 1" in section
+    assert "منها بمكان خاطئ (نوعه أو رقمه): 0" in section
+
+
+def test_a_report_that_should_have_gone_to_the_supervisor_but_did_not_is_a_confident_mistake():
+    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1, needs_confirmation=True)})
+    assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 1 من 1" in confident_section(text)
+
+
+def test_a_correct_report_that_was_flagged_anyway_is_a_needless_referral_not_a_mistake():
+    flagged = answer(needs_confirmation=True, reasons=("number_not_confirmed",))
+    text = render(run_of({1: flagged}), [sample(1)], {1: expected(1)})
+    section = confident_section(text)
+    assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 0 من 1" in section
+    assert "بلاغات فيها خطأ وأُحيلت للمشرف: 0" in section
+    assert "إحالات للمشرف بلا داعٍ (البلاغ مفهوم صحيحاً): 1" in section
+
+
+def test_fields_that_are_not_scored_cannot_make_a_confident_mistake():
+    table = {1: expected(1, loc_kind=None, loc_number=None, urgency=None, needs_confirmation=None)}
+    text = render(run_of({1: answer(loc_number="111", urgency="low")}), [sample(1)], table)
+    assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 0 من 1" in confident_section(text)
+
+
+def test_each_wrong_report_is_labelled_with_what_happened_to_it():
+    reports = [sample(1), sample(2, minutes=5), sample(3, minutes=9)]
+    table = {1: expected(1), 2: expected(2, loc_number="355"), 3: expected(3, loc_number="601")}
+    results = {
+        1: answer(urgency="low"),
+        2: answer(loc_number="335", needs_confirmation=True, reasons=("number_not_confirmed",)),
+        3: answer(loc_number="601", needs_confirmation=True, reasons=("low_confidence",)),
+    }
+    text = render(run_of(results), reports, table)
+    assert "البلاغ 1 (العربية، خطأ واثق):" in text
+    assert "البلاغ 2 (العربية، أُحيل للمشرف):" in text
+    assert "البلاغ 3 (العربية، إحالة بلا داعٍ):" in text
+
+
+# --- duplicate grouping ----------------------------------------------------
+
+
+def grouping_section(text: str) -> str:
+    return text.split("== تجميع البلاغات المكررة ==")[1].split("\n\n")[0]
+
+
+def three_reports_two_incidents():
+    """Reports 1 and 2 are the same incident; report 3 is another room."""
+    reports = [sample(1), sample(2, minutes=5), sample(3, minutes=9)]
+    table = {1: expected(1, incident=1), 2: expected(2, incident=1), 3: expected(3, incident=2, loc_number="355")}
+    return reports, table
+
+
+def test_grouping_score_when_duplicates_are_merged_correctly():
+    reports, table = three_reports_two_incidents()
+    results = {1: answer(), 2: answer(), 3: answer(loc_number="355")}
+    section = grouping_section(render(run_of(results), reports, table))
+    assert f"نافذة الدمج: {MERGE_WINDOW_MINUTES} دقيقة" in section
+    assert "عدد الحوادث: المتوقع 2، الناتج 2" in section
+    assert "بلاغات في حادثتها الصحيحة: 3 من 3 (100%)" in section
+    assert "حوادث مكررة جُمعت كاملة: 1 من 1" in section
+    assert "حوادث تفرّقت بلاغاتها (تكرار لم يُدمج): 0" in section
+    assert "حوادث دُمجت فيها بلاغات مختلفة خطأً: 0" in section
+
+
+def test_a_duplicate_that_was_not_merged_is_counted_and_listed():
+    reports, table = three_reports_two_incidents()
+    unsure = answer(needs_confirmation=True, reasons=("number_not_confirmed",))
+    results = {1: answer(), 2: unsure, 3: answer(loc_number="355")}
+    section = grouping_section(render(run_of(results), reports, table))
+    assert "عدد الحوادث: المتوقع 2، الناتج 3" in section
+    assert "بلاغات في حادثتها الصحيحة: 1 من 3 (33%)" in section
+    assert "حوادث مكررة جُمعت كاملة: 0 من 1" in section
+    assert "حوادث تفرّقت بلاغاتها (تكرار لم يُدمج): 1" in section
+    assert "  - المتوقع معاً: 1، 2. الناتج: 1 | 2" in section
+
+
+def test_two_incidents_merged_by_mistake_are_counted_and_listed():
+    reports, table = three_reports_two_incidents()
+    results = {1: answer(), 2: answer(), 3: answer()}  # report 3 read as the same room
+    section = grouping_section(render(run_of(results), reports, table))
+    assert "عدد الحوادث: المتوقع 2، الناتج 1" in section
+    assert "بلاغات في حادثتها الصحيحة: 0 من 3 (0%)" in section
+    assert "حوادث دُمجت فيها بلاغات مختلفة خطأً: 1" in section
+    assert "  - دُمجت خطأً: 1، 2، 3" in section
+
+
+def test_grouping_uses_the_time_each_report_was_sent():
+    reports = [sample(1), sample(2, minutes=MERGE_WINDOW_MINUTES + 30)]
+    table = {1: expected(1, incident=1), 2: expected(2, incident=2)}
+    section = grouping_section(render(run_of({1: answer(), 2: answer()}), reports, table))
+    assert "بلاغات في حادثتها الصحيحة: 2 من 2 (100%)" in section
+
+
+def test_grouping_is_not_scored_when_the_incident_column_is_not_filled_in():
+    reports = [sample(1), sample(2, minutes=5)]
+    table = {1: expected(1, incident=1), 2: expected(2, incident=None)}
+    section = grouping_section(render(run_of({1: answer(), 2: answer()}), reports, table))
+    assert "لم يُحتسب" in section and "incident" in section
+    assert "بلاغات في حادثتها الصحيحة" not in section
+
+
+def test_grouping_of_a_run_that_stopped_early_counts_only_the_reports_it_read():
+    reports, table = three_reports_two_incidents()
+    section = grouping_section(render(run_of({1: answer()}, stopped_at_cost_limit=True), reports, table))
+    assert "بلاغات في حادثتها الصحيحة: 1 من 1 (100%)" in section
+
+
+def test_the_real_reports_get_a_grouping_score_even_when_nothing_was_understood():
+    reports, table = load_reports(), load_expected()
+    results = {r.id: understand("", client=None) for r in reports}
+    section = grouping_section(render(run_of(results), reports, table))
+    assert "عدد الحوادث: المتوقع 29، الناتج 35" in section
+    assert "حوادث مكررة جُمعت كاملة: 0 من 4" in section
+
+
+# --- the owner's holdout reports -------------------------------------------
+
+HIDDEN = "نص محجوب لا يجوز أن يظهر"
+
+
+def holdout_part(text: str) -> str:
+    return text.split("القسم الثاني")[1].split("== التكلفة والزمن ==")[0]
+
+
+def main_part(text: str) -> str:
+    return text.split("القسم الثاني")[0]
+
+
+def a_holdout(results=None, **changes) -> Holdout:
+    reports = [sample(1, text=HIDDEN), sample(2, text=HIDDEN, minutes=5), sample(3, lang="ur", text=HIDDEN, minutes=9)]
+    table = {1: expected(1), 2: expected(2, type="ac"), 3: expected(3, loc_number="355")}
+    results = results or {1: answer(), 2: answer(), 3: answer(loc_number="355")}
+    return Holdout(run=run_of(results, **changes), reports=reports, expected=table)
+
+
+def test_report_says_where_holdout_reports_go_when_there_are_none():
+    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)})
+    assert "القسم الأول: البلاغات الأساسية" in text
+    assert "القسم الثاني: البلاغات المحجوبة" in text
+    assert "لا توجد بلاغات محجوبة بعد" in holdout_part(text)
+    assert "data/holdout" in holdout_part(text)
+
+
+def test_holdout_results_are_reported_separately_from_the_main_reports():
+    reports = [sample(1), sample(2, minutes=5)]
+    table = {1: expected(1), 2: expected(2, loc_number="601")}
+    main_results = {1: answer(), 2: answer(loc_number="601")}
+    text = render(run_of(main_results), reports, table, holdout=a_holdout())
+    assert "البلاغات: 2 (العربية 2، الأردو 0)" in main_part(text)
+    assert "النوع: الكل 2 من 2 (100%)" in main_part(text)
+    assert "البلاغات: 3 (العربية 2، الأردو 1)" in holdout_part(text)
+    assert "النوع: الكل 2 من 3 (67%) | العربية 1 من 2 (50%) | الأردو 1 من 1 (100%)" in holdout_part(text)
+    assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 1 من 3" in holdout_part(text)
+    assert "بلاغات فيها خطأ ولم تُحَل للمشرف: 0 من 2" in main_part(text)
+
+
+def test_holdout_section_has_its_own_grouping_score():
+    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)}, holdout=a_holdout())
+    # Report 2 was read as the same problem in the same room as report 1, so they were merged.
+    assert "عدد الحوادث: المتوقع 3، الناتج 2" in holdout_part(text)
+
+
+def test_holdout_wrong_reports_are_listed_by_number_without_their_text():
+    wrong = {
+        1: answer(),
+        2: answer(),
+        3: answer(loc_number="335", number_words="كلمات محجوبة"),
+    }
+    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)}, holdout=a_holdout(wrong))
+    part = holdout_part(text)
+    assert "البلاغ 2 (العربية، خطأ واثق)" in part
+    assert "النوع: المتوقع «عطل تكييف»، الناتج «انقطاع الماء»" in part
+    assert "البلاغ 3 (الأردو، خطأ واثق)" in part
+    assert "رقم المكان: المتوقع «355»، الناتج «335»" in part
+    assert HIDDEN not in text
+    assert "كلمات محجوبة" not in text
+    assert "لا تُطبع" in part  # the section says why the texts are missing
+
+
+def test_cost_and_time_cover_the_main_and_the_holdout_reports_together():
+    main = run_of({1: answer(input_tokens=1000, output_tokens=100)}, seconds=2.0)
+    holdout = a_holdout(seconds=6.0)  # 3 answers of 1000 and 100 tokens
+    text = render(main, [sample(1)], {1: expected(1)}, holdout=holdout)
+    assert "4000 داخلة و400 خارجة" in text
+    assert f"{cost_usd('claude-haiku-5-5', 4000, 400):.4f} دولار" in text
+    assert "8.0 ثانية" in text and "2.0 ثانية للبلاغ" in text
+
+
+def test_a_holdout_report_the_model_did_not_answer_is_listed_as_a_holdout_report():
+    failed = answer(type="unclear", needs_confirmation=True, reasons=("not_understood",), error="could not reach the API")
+    holdout = a_holdout({1: answer(), 2: failed, 3: answer(loc_number="355")})
+    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)}, holdout=holdout)
+    assert "بلاغات لم يُجب عنها النموذج: 1" in text
+    assert "رقم 2 (من المحجوبة): could not reach the API" in text
+
+
+def test_report_warns_when_the_holdout_part_stopped_at_the_cost_limit():
+    holdout = a_holdout({1: answer()}, stopped_at_cost_limit=True)
+    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)}, holdout=holdout)
+    assert "توقف الاختبار" in holdout_part(text)
+    assert "توقف الاختبار" not in main_part(text)
+
+
+def test_every_line_is_right_to_left_with_a_holdout_too():
+    text = render(run_of({1: answer()}), [sample(1)], {1: expected(1)}, holdout=a_holdout())
+    assert all(line.startswith("‏") for line in text.splitlines() if line)
+
+
+# --- the comparison of two models ------------------------------------------
+
+
+def two_runs():
+    """Three reports. The smaller model gets one room wrong (flagged); the larger gets all right."""
+    reports = [sample(1), sample(2, minutes=5), sample(3, lang="ur", minutes=9)]
+    table = {
+        1: expected(1, incident=1, room_in_words=True),
+        2: expected(2, incident=1, room_in_words=True),
+        3: expected(3, incident=2, loc_number="355"),
+    }
+    small = run_of(
+        {
+            1: answer(),
+            2: answer(loc_number="970", needs_confirmation=True, reasons=("number_not_confirmed",)),
+            3: answer(loc_number="355"),
+        },
+        seconds=3.0,
+    )
+    large = run_of(
+        {
+            1: answer(input_tokens=1000, output_tokens=300),
+            2: answer(input_tokens=1000, output_tokens=300),
+            3: answer(loc_number="355", input_tokens=1000, output_tokens=300),
+        },
+        model="claude-sonnet-5-5",
+        seconds=9.0,
+    )
+    return small, large, reports, table
+
+
+def test_comparison_names_both_models():
+    text = render_comparison(*two_runs())
+    assert "الأصغر: claude-haiku-5-5" in text
+    assert "الأكبر: claude-sonnet-5-5" in text
+
+
+def test_comparison_shows_each_field_for_both_models_and_who_is_better():
+    text = render_comparison(*two_runs())
+    assert "النوع: الأصغر 3 من 3 (100%) | الأكبر 3 من 3 (100%) | لا فرق" in text
+    assert "رقم المكان: الأصغر 2 من 3 (67%) | الأكبر 3 من 3 (100%) | الأكبر أفضل بـ 1" in text
+    assert "كل الحقول معاً: الأصغر 2 من 3 (67%) | الأكبر 3 من 3 (100%) | الأكبر أفضل بـ 1" in text
+
+
+def test_comparison_says_so_when_the_smaller_model_is_better():
+    small, large, reports, table = two_runs()
+    text = render_comparison(large, small, reports, table)  # swapped on purpose
+    assert "رقم المكان: الأصغر 3 من 3 (100%) | الأكبر 2 من 3 (67%) | الأصغر أفضل بـ 1" in text
+
+
+def test_comparison_splits_all_fields_by_language():
+    text = render_comparison(*two_runs())
+    assert "كل الحقول معاً (العربية): الأصغر 1 من 2 (50%) | الأكبر 2 من 2 (100%) | الأكبر أفضل بـ 1" in text
+    assert "كل الحقول معاً (الأردو): الأصغر 1 من 1 (100%) | الأكبر 1 من 1 (100%) | لا فرق" in text
+
+
+def test_comparison_shows_spoken_rooms_and_grouping():
+    text = render_comparison(*two_runs())
+    assert "رقم الغرفة المنطوق بالكلمات: الأصغر 1 من 2 (50%) | الأكبر 2 من 2 (100%) | الأكبر أفضل بـ 1" in text
+    assert "بلاغات في حادثتها الصحيحة: الأصغر 1 من 3 (33%) | الأكبر 3 من 3 (100%) | الأكبر أفضل بـ 2" in text
+
+
+def test_comparison_shows_confident_mistakes_for_both_models():
+    small, large, reports, table = two_runs()
+    large.results[3] = answer(loc_number="335", input_tokens=1000, output_tokens=300)  # wrong and not flagged
+    text = render_comparison(small, large, reports, table)
+    assert "بلاغات فيها خطأ ولم تُحَل للمشرف: الأصغر 0 | الأكبر 1" in text
+    assert "منها بمكان خاطئ (نوعه أو رقمه): الأصغر 0 | الأكبر 1" in text
+
+
+def test_comparison_shows_the_cost_gap():
+    small, large, reports, table = two_runs()
+    text = render_comparison(small, large, reports, table)
+    small_cost = cost_usd("claude-haiku-5-5", 3000, 300)
+    large_cost = cost_usd("claude-sonnet-5-5", 3000, 900)
+    assert f"التكلفة التقريبية: الأصغر {small_cost:.4f} دولار | الأكبر {large_cost:.4f} دولار" in text
+    assert f"الأكبر أغلى بنحو {round(large_cost / small_cost)} مرة" in text
+
+
+def test_comparison_shows_the_time_per_report():
+    text = render_comparison(*two_runs())
+    assert "الزمن للبلاغ: الأصغر 1.0 ثانية | الأكبر 3.0 ثانية" in text
+
+
+def test_comparison_warns_when_a_run_stopped_at_the_cost_limit():
+    small, large, reports, table = two_runs()
+    large.stopped_at_cost_limit = True
+    del large.results[3]
+    text = render_comparison(small, large, reports, table)
+    assert "تنبيه" in text and "لم يُكمل" in text
+
+
+def test_every_line_of_the_comparison_starts_right_to_left():
+    text = render_comparison(*two_runs())
+    assert all(line.startswith("‏") for line in text.splitlines() if line)
