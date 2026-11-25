@@ -253,12 +253,14 @@ class Store:
                         "update cases set incident = ?, waiting = ? where id = ?",
                         (_incident_to_json(incident), int(completed.needs_confirmation), case_id),
                     )
-                # A reply that completes WHERE the report is may make it a duplicate of an open case,
-                # so the duplicate check runs again (owner's decisions): after "نعم" to the hotel
-                # question, and after a room or a floor. A reply with only a name does not.
-                confirmed_hotel = question.field == "hotel_confirm" and completed.hotel != report.hotel
-                gave_place = question.field == "place" and completed.loc_number is not None
-                if (confirmed_hotel or gave_place) and incident.report_ids == [report_id]:
+                # Any answer that fills in the hotel, the room, the floor or the type may make the
+                # report a duplicate of an open case, so the duplicate check runs again (owner's
+                # decision). A reply that only gives a name changes none of these and does not run it.
+                def what_merging_looks_at(r: Understanding) -> tuple:
+                    return (r.type, r.hotel, r.loc_kind, r.loc_number)
+
+                changed = what_merging_looks_at(completed) != what_merging_looks_at(report)
+                if changed and incident.report_ids == [report_id]:
                     target = self._join_open_case(case_id, report_id, completed)
                     if target is not None:
                         case_id, joined = target, True

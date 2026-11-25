@@ -450,3 +450,69 @@ def test_a_reply_with_only_a_name_does_not_run_the_check_again(site, monkeypatch
     site.post("/api/operator/reset", data={"confirm": "yes"})
     tap(site, room_case_then_report_without_room(site), "907")
     assert len(calls) == 1  # the room reply does run it
+
+
+# --- any answer that fills in the hotel, the room, the floor or the type runs the check again ----------------
+
+LOST_HERE = "حاج تايه عند الاستقبال"
+LOST_NOWHERE = "في حاج تايه ما يعرف وين يروح"
+LOST_READING = dict(type="lost_pilgrim", location_kind="none", number_words="", location_number="")
+UNCLEAR_907 = "في مشكلة في غرفة 907"
+
+
+def lost_case_then_lost_report_without_hotel(site, minutes_between=5):
+    site.engine.readings[LOST_HERE] = reading(**LOST_READING)
+    site.engine.readings[LOST_NOWHERE] = reading(**LOST_READING)
+    send(site, LOST_HERE)  # from the counter of برج السكينة
+    site.clock.now += timedelta(minutes=minutes_between)
+    reply = send(site, LOST_NOWHERE, hotel="")  # from no counter: no hotel
+    assert reply["question"]["text"] == "في أي فندق؟" and HOTEL in reply["question"]["options"]
+    return reply
+
+
+def test_picking_the_hotel_from_the_buttons_joins_the_open_case_of_that_hotel(site):
+    answered = tap(site, lost_case_then_lost_report_without_hotel(site), HOTEL)
+    assert answered["merged"] is True and answered["case_id"] == 1
+    (case,) = cases(site)
+    assert case["count_text"] == "بلاغان، حالة واحدة"
+
+
+def test_picking_another_hotel_stays_its_own_case(site):
+    answered = tap(site, lost_case_then_lost_report_without_hotel(site), "دار المنارة")
+    assert answered["merged"] is False and len(cases(site)) == 2
+
+
+def test_the_hotel_pick_keeps_the_window_from_when_the_report_was_sent(site):
+    reply = lost_case_then_lost_report_without_hotel(site, minutes_between=10)
+    site.clock.now += timedelta(minutes=30)  # lost pilgrims merge within 15 minutes; the tap comes later
+    assert tap(site, reply, HOTEL)["merged"] is True
+    site.post("/api/operator/reset", data={"confirm": "yes"})
+    assert tap(site, lost_case_then_lost_report_without_hotel(site, minutes_between=16), HOTEL)["merged"] is False
+
+
+def water_case_then_unclear_report_in_the_same_room(site, minutes_between=5):
+    site.engine.readings[UNCLEAR_907] = reading(type="unclear")
+    send(site, WITH_ROOM)
+    site.clock.now += timedelta(minutes=minutes_between)
+    reply = send(site, UNCLEAR_907)
+    assert reply["question"]["text"] == "ما المشكلة؟" and len(cases(site)) == 2
+    return reply
+
+
+def test_picking_the_type_joins_the_open_case_of_that_type_in_that_room(site):
+    answered = tap(site, water_case_then_unclear_report_in_the_same_room(site), copy.TYPES["water"])
+    assert answered["merged"] is True and answered["case_id"] == 1 and len(cases(site)) == 1
+
+
+def test_picking_another_type_stays_its_own_case(site):
+    answered = tap(site, water_case_then_unclear_report_in_the_same_room(site), copy.TYPES["ac"])
+    assert answered["merged"] is False and len(cases(site)) == 2
+
+
+def test_the_type_pick_keeps_the_60_minute_window_from_when_the_report_was_sent(site):
+    reply = water_case_then_unclear_report_in_the_same_room(site, minutes_between=50)
+    site.clock.now += timedelta(minutes=30)
+    assert tap(site, reply, copy.TYPES["water"])["merged"] is True
+    site.post("/api/operator/reset", data={"confirm": "yes"})
+    late = water_case_then_unclear_report_in_the_same_room(site, minutes_between=61)
+    assert tap(site, late, copy.TYPES["water"])["merged"] is False

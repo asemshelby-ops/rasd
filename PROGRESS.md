@@ -172,3 +172,5 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
   (QUESTIONS.md 85). Tests: 886 passed. No API calls.
 - Then: the duplicate check also runs again after a reply that gives the room
   or the floor; a name-only reply does not run it. Tests: 893 passed. No API calls.
+- Then: the rule is now "any answer that fills in the hotel, the room, the
+  floor or the type runs the duplicate check again". Tests: 899 passed. No API calls.
