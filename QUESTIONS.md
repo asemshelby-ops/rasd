@@ -427,8 +427,12 @@ labels in `app/copy.py`, existing colours only. Choices I made:
 101. **Every open, assigned case can now be acknowledged from the board**, not
      only critical ones, because the third step needs an action. Only critical
      cases have an acknowledge deadline, as before.
-102. **A case closed without being acknowledged** ends on "closed"; the skipped
-     step is drawn as passed and nothing is recorded for it.
+102. **A step that did not happen is shown and recorded as skipped** (the
+     owner's change on review; the record is evidence). On closing, any step
+     the case never went through (assigned, in progress) is stored as skipped:
+     no time and no name of its own, only when that was noted. The board and
+     the sender see it dashed and crossed out with the word «تُخطّيت». The
+     case history also gets an entry such as "skipped in_progress".
 103. **Done steps are outlined in dark, the current one is filled, the ones to
      come are outlined in the muted colour.** The closed step is filled green,
      since green means closed. Each step also says its state in words for a
@@ -440,3 +444,4 @@ labels in `app/copy.py`, existing colours only. Choices I made:
 105. **The step record is its own table** (`steps`), beside the event log,
      so the log's meaning did not change.
 
+**The owner approved 100 to 105 on review**, with the change in 102.

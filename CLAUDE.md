@@ -18,7 +18,7 @@ these before changing anything:
   has not yet confirmed them, except the three listed below. Treat the rest as provisional.
 - `DEMO.md` (Arabic): demo-day guide. `WHATSAPP_COUNT.md` (Arabic): the counting tool.
 
-What exists (950 tests, `python -m pytest`, no key and no network needed):
+What exists (955 tests, `python -m pytest`, no key and no network needed):
 
 - `rasd/`: the rules. The model READS a message (`understand.py`); the team's
   tables DECIDE owner, priority and deadlines (`routing.py`); our code CHECKS
@@ -290,7 +290,8 @@ Decided by the owner on 26 November 2026, after the morning report (built and te
 
 - Every case has four progress steps (`copy.STEPS`: received, assigned, in
   progress, closed), recorded with time and who in the `steps` table
-  (`Store._step`). The board shows them on each card; the sender sees them
+  (`Store._step`). A step a case went past without it happening is recorded
+  and drawn as skipped, never as done: the record is evidence. The board shows them on each card; the sender sees them
   under their own report (`/api/reports/N/status`, steps only, no names).
 
 Not built: correcting the room on the phone before the report reaches the

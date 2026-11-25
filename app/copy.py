@@ -31,7 +31,7 @@ NO_CASES = "لا حالات هنا الآن."
 STEPS = {"received": "وصل البلاغ", "assigned": "أُسند إلى الجهة", "in_progress": "قيد المعالجة", "closed": "أُغلقت"}
 STEPS_TITLE = "مراحل الحالة"
 YOUR_REPORT_STEPS = "مراحل بلاغك"
-STEP_STATES = {"done": "تمّت", "current": "المرحلة الحالية", "todo": "لم تبدأ"}
+STEP_STATES = {"done": "تمّت", "current": "المرحلة الحالية", "todo": "لم تبدأ", "skipped": "تُخطّيت"}
 STEP_BY_SENDER = "المرسل"
 STEP_BY_RASD = "رصد"
 # The board's layout: a band for critical cases, then three columns.

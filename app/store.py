@@ -39,7 +39,8 @@ create table if not exists private_numbers (
     id integer primary key, report_id integer, case_id integer, kind text, value text);
 create table if not exists notifications (id integer primary key, case_id integer, at text, text text);
 create table if not exists settings (name text primary key, value text);
-create table if not exists steps (case_id integer, step text, at text, who text, primary key (case_id, step));
+create table if not exists steps (
+    case_id integer, step text, at text, who text, skipped integer default 0, primary key (case_id, step));
 """
 
 # How a report reached us. "saved" is a voice note the operator sent from the saved scene files.
@@ -75,18 +76,24 @@ def _screen_hotel(hotel: str | None) -> str | None:
     return hotel if hotel is None or hotel in HOTELS else copy.UNLISTED_HOTEL
 
 
-def _steps_view(reached: dict[str, str]) -> list[dict]:
-    """The four steps with their state. reached: step -> when. The furthest step reached is the current one;
-    a step that was skipped on the way (closed without being acknowledged) counts as done, with no time."""
+def _steps_view(reached: dict[str, str], skipped: set[str] = frozenset()) -> list[dict]:
+    """The four steps with their state. reached: step -> when it happened. skipped: steps the case went past.
+
+    The furthest step reached is the current one. A step is "done" only when it really happened;
+    one the case went past without it happening is "skipped", with no time.
+    """
     keys = list(copy.STEPS)
     current = max((keys.index(step) for step in reached), default=0)
+
+    def state(index: int, key: str) -> str:
+        if index == current:
+            return "current"
+        if index > current:
+            return "todo"
+        return "done" if key in reached and key not in skipped else "skipped"
+
     return [
-        {
-            "key": key,
-            "label": copy.STEPS[key],
-            "state": "current" if index == current else ("done" if index < current else "todo"),
-            "at": reached.get(key),
-        }
+        {"key": key, "label": copy.STEPS[key], "state": state(index, key), "at": reached.get(key)}
         for index, key in enumerate(keys)
     ]
 
@@ -112,6 +119,8 @@ class Store:
         self.db.executescript(TABLES)
         if "language" not in [row["name"] for row in self.db.execute("pragma table_info(reports)")]:
             self.db.execute("alter table reports add column language text")  # a file made before the design pass
+        if "skipped" not in [row["name"] for row in self.db.execute("pragma table_info(steps)")]:
+            self.db.execute("alter table steps add column skipped integer default 0")  # a file made before skipped steps
         self.lock = threading.Lock()  # the pages are served from several threads
 
     # --- settings and clearing ------------------------------------------------------------
@@ -209,26 +218,37 @@ class Store:
             }
             self.db.execute("update cases set replacement = ? where id = ?", (json.dumps(saved, ensure_ascii=False), case_id))
 
-    def _step(self, case_id: int, step: str, at: datetime, who: str) -> None:
-        """Records that a case reached a step (copy.STEPS), when, and who did it. The first time counts."""
+    def _step(self, case_id: int, step: str, at: datetime, who: str, skipped: bool = False) -> None:
+        """Records that a case reached a step (copy.STEPS), when, and who did it. The first time counts.
+
+        skipped=True records the opposite: the case went past this step WITHOUT it happening.
+        The record is evidence, so a skipped step is stored as skipped and never as done.
+        """
         self.db.execute(
-            "insert or ignore into steps (case_id, step, at, who) values (?, ?, ?, ?)",
-            (case_id, step, at.isoformat(timespec="seconds"), who),
+            "insert or ignore into steps (case_id, step, at, who, skipped) values (?, ?, ?, ?, ?)",
+            (case_id, step, at.isoformat(timespec="seconds"), who, int(skipped)),
         )
 
     def step_record(self, case_id: int) -> list[dict]:
-        """The steps a case has reached, in order, each with its time and who did it."""
+        """The history of a case's steps, in order. A step that happened has its time and who did it.
+        A step that was skipped says so, with no time and no name of its own: only when that was noted."""
         with self.lock:
-            rows = self.db.execute("select step, at, who from steps where case_id = ?", (case_id,)).fetchall()
+            rows = self.db.execute("select step, at, who, skipped from steps where case_id = ?", (case_id,)).fetchall()
         names = {"sender": copy.STEP_BY_SENDER, "rasd": copy.STEP_BY_RASD}
-        found = {row["step"]: {"step": row["step"], "at": row["at"], "who": names.get(row["who"], row["who"])} for row in rows}
+        found = {}
+        for row in rows:
+            if row["skipped"]:
+                found[row["step"]] = {"step": row["step"], "at": None, "who": None, "skipped": True, "noted_at": row["at"]}
+            else:
+                found[row["step"]] = {"step": row["step"], "at": row["at"], "who": names.get(row["who"], row["who"]), "skipped": False}
         return [found[step] for step in copy.STEPS if step in found]
 
     def steps(self, case_id: int) -> list[dict]:
-        """The four steps of a case as the board and the sender see them: which are done, which is the
-        current one, and when each was reached. No names: who did a step is in step_record()."""
-        reached = {entry["step"]: entry["at"] for entry in self.step_record(case_id)}
-        return _steps_view(reached)
+        """The four steps of a case as the board and the sender see them: done, current, to come or
+        skipped, and when each was reached. No names: who did a step is in step_record()."""
+        record = self.step_record(case_id)
+        reached = {entry["step"]: entry["at"] for entry in record if not entry["skipped"]}
+        return _steps_view(reached, {entry["step"] for entry in record if entry["skipped"]})
 
     def report_status(self, report_id: int) -> tuple[int, list[dict]] | None:
         """For the sender: the case their report belongs to NOW (also after a merge), and its steps."""
@@ -372,6 +392,12 @@ class Store:
                 raise CaseClosed
             close_incident(incident, closed_by=who, at=at)
             self.db.execute("update cases set incident = ? where id = ?", (_incident_to_json(incident), case_id))
+            # Steps the case never went through are recorded as skipped, so the record cannot be read as if they happened.
+            reached = {row["step"] for row in self.db.execute("select step from steps where case_id = ?", (case_id,))}
+            for step in ("assigned", "in_progress"):
+                if step not in reached:
+                    self._step(case_id, step, at, incident.closed_by, skipped=True)
+                    self._log(case_id, at, incident.closed_by, f"skipped {step}")
             self._log(case_id, at, incident.closed_by, "closed")
             self._step(case_id, "closed", at, incident.closed_by)
 
@@ -403,7 +429,7 @@ class Store:
             rows = self.db.execute("select * from cases order by id").fetchall()
             saved = self.db.execute("select distinct case_id from reports where source = ?", (SAVED_SOURCE,)).fetchall()
             spoken = self.db.execute("select case_id, language from reports where language is not null order by id").fetchall()
-            stepped = self.db.execute("select case_id, step, at from steps").fetchall()
+            stepped = self.db.execute("select case_id, step, at, skipped from steps").fetchall()
         from_saved = {row["case_id"] for row in saved}
         languages: dict[int, list[str]] = {}
         for row in spoken:  # each language once, in the order the reports came
@@ -411,14 +437,18 @@ class Store:
             if row["language"] in copy.LANGUAGES and copy.LANGUAGES[row["language"]] not in names:
                 names.append(copy.LANGUAGES[row["language"]])
         reached: dict[int, dict[str, str]] = {}
+        skipped: dict[int, set[str]] = {}
         for row in stepped:
-            reached.setdefault(row["case_id"], {})[row["step"]] = row["at"]
+            if row["skipped"]:
+                skipped.setdefault(row["case_id"], set()).add(row["step"])
+            else:
+                reached.setdefault(row["case_id"], {})[row["step"]] = row["at"]
         cases = [
             {
                 **self._public(row, now),
                 "from_saved": row["id"] in from_saved,
                 "languages": languages.get(row["id"], []),
-                "steps": _steps_view(reached.get(row["id"], {})),
+                "steps": _steps_view(reached.get(row["id"], {}), skipped.get(row["id"], set())),
             }
             for row in rows
         ]

@@ -104,8 +104,8 @@ def test_confirming_assigns_it_and_records_who_and_when(site):
     site.post("/api/cases/1/confirm", data={"who": "سالم"})
     assert states(case(site)["steps"]) == ["done", "current", "todo", "todo"]
     assert record(site) == [
-        {"step": "received", "at": "2026-12-23T10:00:00", "who": copy.STEP_BY_SENDER},
-        {"step": "assigned", "at": "2026-12-23T10:03:00", "who": "سالم"},
+        {"step": "received", "at": "2026-12-23T10:00:00", "who": copy.STEP_BY_SENDER, "skipped": False},
+        {"step": "assigned", "at": "2026-12-23T10:03:00", "who": "سالم", "skipped": False},
     ]
 
 
@@ -114,12 +114,12 @@ def test_an_answer_that_completes_the_report_assigns_it(site):
     site.clock.now += timedelta(minutes=2)
     site.post(f"/api/reports/{reply['report_id']}/answer", data={"reply": "512"})
     assert states(case(site)["steps"]) == ["done", "current", "todo", "todo"]
-    assert record(site)[1] == {"step": "assigned", "at": "2026-12-23T10:02:00", "who": copy.STEP_BY_RASD}
+    assert record(site)[1] == {"step": "assigned", "at": "2026-12-23T10:02:00", "who": copy.STEP_BY_RASD, "skipped": False}
 
 
 def test_a_report_assigned_on_arrival_is_assigned_by_rasd(site):
     send(site, WITH_ROOM)
-    assert record(site)[1] == {"step": "assigned", "at": "2026-12-23T10:00:00", "who": copy.STEP_BY_RASD}
+    assert record(site)[1] == {"step": "assigned", "at": "2026-12-23T10:00:00", "who": copy.STEP_BY_RASD, "skipped": False}
 
 
 def test_acknowledging_puts_it_in_progress_once(site):
@@ -129,7 +129,7 @@ def test_acknowledging_puts_it_in_progress_once(site):
     site.clock.now += timedelta(minutes=4)
     site.post("/api/cases/1/acknowledge", data={"who": "سالم"})
     assert states(case(site)["steps"]) == ["done", "done", "current", "todo"]
-    assert record(site)[2] == {"step": "in_progress", "at": "2026-12-23T10:04:00", "who": "هشام"}
+    assert record(site)[2] == {"step": "in_progress", "at": "2026-12-23T10:04:00", "who": "هشام", "skipped": False}
 
 
 def test_closing_is_the_last_step_with_who_and_when(site):
@@ -138,14 +138,64 @@ def test_closing_is_the_last_step_with_who_and_when(site):
     site.clock.now += timedelta(minutes=9)
     site.post("/api/cases/1/close", data={"who": "هشام"})
     assert states(case(site)["steps"]) == ["done", "done", "done", "current"]
-    assert record(site)[-1] == {"step": "closed", "at": "2026-12-23T10:09:00", "who": "هشام"}
+    assert record(site)[-1] == {"step": "closed", "at": "2026-12-23T10:09:00", "who": "هشام", "skipped": False}
 
 
-def test_a_case_closed_without_being_acknowledged_still_ends_on_closed(site):
+def test_a_step_that_did_not_happen_is_shown_as_skipped_never_as_done(site):
     send(site, WITH_ROOM)
+    site.clock.now += timedelta(minutes=7)
     site.post("/api/cases/1/close", data={"who": "هشام"})
-    assert states(case(site)["steps"]) == ["done", "done", "done", "current"]
-    assert [entry["step"] for entry in record(site)] == ["received", "assigned", "closed"]  # nothing is invented for the skipped step
+    steps = case(site)["steps"]
+    assert states(steps) == ["done", "done", "skipped", "current"]
+    assert steps[2]["at"] is None
+
+
+def test_the_record_says_skipped_and_gives_the_step_no_time_and_no_name(site):
+    """The record is evidence: it must never show a step that did not happen."""
+    send(site, WITH_ROOM)
+    site.clock.now += timedelta(minutes=7)
+    site.post("/api/cases/1/close", data={"who": "هشام"})
+    assert record(site) == [
+        {"step": "received", "at": "2026-12-23T10:00:00", "who": copy.STEP_BY_SENDER, "skipped": False},
+        {"step": "assigned", "at": "2026-12-23T10:00:00", "who": copy.STEP_BY_RASD, "skipped": False},
+        {"step": "in_progress", "at": None, "who": None, "skipped": True, "noted_at": "2026-12-23T10:07:00"},
+        {"step": "closed", "at": "2026-12-23T10:07:00", "who": "هشام", "skipped": False},
+    ]
+    events = site.get("/api/cases/1/events").json()["events"]
+    assert {"what": "skipped in_progress", "who": "هشام", "at": "2026-12-23T10:07:00"} in events
+
+
+def test_a_case_closed_while_it_still_waited_for_the_supervisor_skipped_two_steps(site):
+    waiting_report(site)
+    site.post("/api/cases/1/close", data={"who": "هشام"})
+    assert states(case(site)["steps"]) == ["done", "skipped", "skipped", "current"]
+    assert [(entry["step"], entry["skipped"]) for entry in record(site)] == [
+        ("received", False), ("assigned", True), ("in_progress", True), ("closed", False),
+    ]  # fmt: skip
+
+
+def test_a_case_that_went_through_every_step_has_nothing_skipped(site):
+    send(site, WITH_ROOM)
+    site.post("/api/cases/1/acknowledge", data={"who": "هشام"})
+    site.post("/api/cases/1/close", data={"who": "هشام"})
+    assert "skipped" not in states(case(site)["steps"]) and not any(entry["skipped"] for entry in record(site))
+    assert not any(event["what"].startswith("skipped") for event in site.get("/api/cases/1/events").json()["events"])
+
+
+def test_an_open_case_has_no_skipped_step_yet(site):
+    send(site, WITH_ROOM)
+    assert states(case(site)["steps"]) == ["done", "current", "todo", "todo"]
+
+
+def test_the_board_and_the_sender_see_the_skipped_step_with_its_label(site):
+    assert copy.STEP_STATES["skipped"] == "تُخطّيت"
+    reply = send(site, WITH_ROOM)
+    site.post("/api/cases/1/close", data={"who": "هشام"})
+    page = site.get("/board").text
+    assert "step-skipped" in page and "تُخطّيت" in page
+    status = site.get(f"/api/reports/{reply['report_id']}/status").json()
+    assert states(status["steps"]) == ["done", "done", "skipped", "current"]
+    assert "step-skipped" in site.get("/static/style.css").text and "skipped" in site.get("/static/report.js").text
 
 
 def test_every_open_assigned_case_can_be_acknowledged_from_the_board_not_only_critical_ones(site):

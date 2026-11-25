@@ -89,6 +89,8 @@ input[type=text], input[type=password], select, textarea { padding: .4rem .6rem;
 .progress { list-style: none; display: flex; flex-wrap: wrap; gap: .4rem; padding: 0; margin: .5rem 0; }
 .step { border: 2px solid var(--muted); color: var(--muted); background: var(--card); border-radius: 999px; padding: 0 .8rem; font-weight: 500; white-space: nowrap; }
 .step-done { border-color: var(--text); color: var(--text); }                       /* behind us: a dark outline */
+.step-skipped { border-style: dashed; }                                              /* did not happen: dashed, crossed out, and it says so */
+.step-skipped .skipped-word { font-weight: 700; color: var(--text); }
 .step-current { border-color: var(--text); background: var(--text); color: #FFFFFF; font-weight: 700; }
 .step-current.step-closed { border-color: var(--done); background: var(--done); }    /* green means closed */
 .board .progress { font-size: 1.125rem; }

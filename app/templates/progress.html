@@ -1,9 +1,10 @@
 {# The row of four steps of a case. The current step is filled, the others are outlined.
+   A step the case went past without it happening is dashed, crossed out, and says so in words.
    Colour is never the only sign: every step says its state in words for a screen reader. #}
 {% macro progress(steps, title) %}
 <ol class="progress" aria-label="{{ title }}">
   {% for step in steps %}
-  <li class="step step-{{ step.state }} step-{{ step.key }}"{% if step.state == "current" %} aria-current="step"{% endif %}>{{ step.label }}<span class="visually-hidden"> ({{ copy.STEP_STATES[step.state] }})</span></li>
+  <li class="step step-{{ step.state }} step-{{ step.key }}"{% if step.state == "current" %} aria-current="step"{% endif %}>{% if step.state == "skipped" %}<s>{{ step.label }}</s> <span class="skipped-word">{{ copy.STEP_STATES.skipped }}</span>{% else %}{{ step.label }}<span class="visually-hidden"> ({{ copy.STEP_STATES[step.state] }})</span>{% endif %}</li>
   {% endfor %}
 </ol>
 {% endmacro %}

@@ -62,10 +62,18 @@
       var item = document.createElement("li");
       item.className = "step step-" + step.state + " step-" + step.key;
       if (step.state === "current") { item.setAttribute("aria-current", "step"); }
-      item.textContent = step.label;
       var said = document.createElement("span");
-      said.className = "visually-hidden";
-      said.textContent = " (" + T.stepStates[step.state] + ")";
+      if (step.state === "skipped") { // crossed out, and the word is written beside it
+        var crossed = document.createElement("s");
+        crossed.textContent = step.label;
+        item.appendChild(crossed);
+        said.className = "skipped-word";
+        said.textContent = " " + T.stepStates.skipped;
+      } else {
+        item.textContent = step.label;
+        said.className = "visually-hidden";
+        said.textContent = " (" + T.stepStates[step.state] + ")";
+      }
       item.appendChild(said);
       row.appendChild(item);
     });

@@ -128,7 +128,8 @@ def test_the_whole_scene_from_two_voice_notes_to_a_closed_case(site):
     assert closed["state"] == "closed" and closed["closed_by"] == record.supervisor
     assert closed["closed_at"] == "2026-12-23T10:10:00"
     events = site.get(f"/api/cases/{case['id']}/events").json()["events"]
-    assert [event["what"] for event in events] == ["reported", "reported", "identified", "closed"]
+    # Nobody pressed "acknowledge" in this scene, and the history says so instead of leaving it out.
+    assert [event["what"] for event in events] == ["reported", "reported", "identified", "skipped in_progress", "closed"]
     assert events[-1]["who"] == record.supervisor and events[-1]["at"] == "2026-12-23T10:10:00"
 
 
