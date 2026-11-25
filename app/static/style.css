@@ -6,6 +6,7 @@
   --ok: #155d2b; --warn-bg: #fff1c2;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; } /* a class that sets display must not un-hide a hidden element */
 html { font-size: 18px; }
 body { margin: 0; background: var(--paper); color: var(--ink); line-height: 1.6;
   font-family: "Noto Kufi Arabic", "Segoe UI", Tahoma, "Geeza Pro", Arial, sans-serif; }

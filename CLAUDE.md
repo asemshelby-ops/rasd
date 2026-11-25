@@ -7,93 +7,73 @@ turns it into a report with a type, a room, an owner and a deadline. This code
 is the base of a live demo: it must be reliable, simple to explain, and easy
 for students to maintain.
 
-## Overnight run of 25 to 26 November 2026
+## Where the work stands (after the overnight run of 25 to 26 November 2026)
 
-The owner set a six-stage overnight run. **`PROGRESS.md` says which stages are
-done and what comes next; read it first.** `QUESTIONS.md` lists the choices made
-without the owner. The notes below this section describe the state before that
-run and are updated in its last stage.
+The owner set a six-stage overnight run. **All six stages are done.** Read
+these before changing anything:
 
-## Where the work stands
+- `MORNING_REPORT.md` (Arabic): the report to the owner, with what is needed from them.
+- `PROGRESS.md`: what each stage did, test counts, measurements, API spending.
+- `QUESTIONS.md`: the 81 choices made without the owner, numbered. The owner
+  has not yet confirmed them. Treat them as provisional.
+- `DEMO.md` (Arabic): demo-day guide. `WHATSAPP_COUNT.md` (Arabic): the counting tool.
 
-Phase 1, steps 1 to 3 are done and unit-tested, and the step 4 benchmark covers
-everything in its list below. Built: `data/reports.csv` (42 fictional reports),
-`data/expected.csv`, `rasd/understand.py` (understanding function and prompt),
-`rasd/numbers.py` (dialect number parser), `rasd/routing.py` (the team's owner
-and priority tables), `rasd/incidents.py` (duplicate merging),
-`rasd/scoring.py`, `rasd/cost.py`, `benchmark.py`, and the holdout folder
-`data/holdout/`.
+What exists (847 tests, `python -m pytest`, no key and no network needed):
 
-**Priority is no longer judged by the model** (owner's decision, 25 November
-2026, after a field review). It comes from tables in `rasd/routing.py`: a
-default per type, changed by the journey stage, raised one level for every risk
-the message states. See "Agreed design". **This is a team decision based on the
-pilgrim's journey. It is not tuning to the test.** The expected answers were
-recomputed from the table: each row of `data/expected.csv` lists the risks its
-message states, and a unit test checks that the expected priority is exactly
-what the table gives for that type and those risks.
+- `rasd/`: the rules. The model READS a message (`understand.py`); the team's
+  tables DECIDE owner, priority and deadlines (`routing.py`); our code CHECKS
+  every quote of the model against the message. Also: number parser, privacy
+  (`privacy.py` hides passport, visa and phone numbers before the model),
+  ask-back (one question per report), duplicate merging and closing
+  (`incidents.py`), case rules, simulated Elm lookup, voice behind one
+  interface, mock card reader.
+- `app/`: the demo pages (FastAPI, one SQLite file, plain HTML, no build
+  step): reporting page, board, supervisor page, lost-card flow, Elm view,
+  before-and-after page, operator page (replay switch), scenario card.
+- `demo/`: the scene's words and files, the hotspot start helper
+  (`python -m demo.run`), the voice-to-board timer, the scene recorder.
+- `whatsapp_count/`: a separate, strictly local tool (standard library only).
+- `benchmark.py`, `data/` (58 main messages), `measurements/`, `comparison/`.
 
-Seven reports (36 to 42) were added for the three new types, because the data
-tests require every type to be covered. They need the team's dialect review
-like the first 35.
+**Final measurement** (25 November 2026, 12:30 UTC, one run of `python benchmark.py` on
+`claude-haiku-5-5`, 58 messages, saved in
+`measurements/stage6_final_benchmark.txt`): wrong and not sent to the
+supervisor 0 of 58; wrong and sent to the supervisor 1 (report 15); needless
+referrals 0; all fields right 57 of 58; spoken room numbers 15 of 15;
+non-reports recognised 6 of 6; real reports dropped 0; right question asked 6
+of 6; grouping 52 of 52; about $0.029 per run. Earlier runs of the night are in
+`PROGRESS.md`. The measurements of 25 November (42 and 35 reports) are kept in
+`README.md` and `comparison/` and are not comparable.
 
-**Current measurement** (25 November 2026, `python benchmark.py --repeat 3` on
-`claude-haiku-5-5`, 42 reports): all fields right on 41, 39 and 39 of 42;
-confident mistakes 0, 0 and 1, never a place; priority right on 41, 41 and 40 of
-41; one report (10) changed priority between the runs; spoken room numbers 13,
-13 and 14 of 14; grouping 42 of 42 each time; about $0.016 per run.
+**Voice-to-board time**: 2.39 to 3.16 seconds in three runs on one machine,
+target under 8. Live speech to text and the upload from a phone were NOT part
+of it.
 
-**Open question for the owner: pilgrims trapped in an elevator.** The one
-confident mistake was report 10 (Urdu, pilgrims stuck in an elevator): in one
-run Haiku filed them under the risk `alone_or_lost`, which raised urgent to
-critical. Cause, found by measuring: that danger has no entry in the team's list
-of five risks, and `alone_or_lost` is the nearest one; the quoted words really
-are in the message, so our check passes. It happened in 4 of 66 calls on report
-10 and in 0 of 24 on the two Arabic wordings (reports 8 and 9). A narrower
-wording of that risk in the prompt was tried and made it worse (9 of 12), so it
-was not kept. Nothing was changed. The team decides whether trapped pilgrims
-should raise the priority.
+**Not real yet. Say so whenever results are reported:**
 
-Other things the owner was told and has not decided:
-
-- Priority follows the type only, so a partial fault (report 29, an AC that
-  drips but cools; report 30, some corridor bulbs) is "urgent" like a full
-  outage, and sparks with a burning smell (report 22) stay "urgent".
-- Haiku misread the dialect word for 600 ("ستمية") in new report 40, in two of
-  three runs; our parser disagreed, so it was flagged. A table of hundreds in
-  the prompt, like the one for 11 to 19, was proposed and not built.
-- Defaults I chose that the team may change in `rasd/routing.py`: the three new
-  types are owned by `pilgrim_affairs`; `unclear` is `urgent`; the sample
-  deadline for `critical` is 5 minutes; `CURRENT_STAGE` is `makkah`.
-- A risk whose quoted words are not found in the message still counts (the
-  higher priority is the safe side) and the report goes to the supervisor.
-- The guide inside `data/holdout/` predates the priority change and was not
-  edited, because the owner said not to open that folder. The current rules for
-  writing holdout reports are in the main `README.md`.
-
-**Older measurements** (35 reports, the model still judging priority; kept in
-`README.md` and `comparison/` for the record): the one-time comparison gave
-Haiku 30 of 35 and `claude-sonnet-5-5` 35 of 35; after the two number fixes
-Haiku gave 35, 32 and 35 of 35. They are not comparable with the current
-measurement.
+- Speech to text has never run: `RASD_OPENAI_KEY` is not set and no real
+  recording exists. The two saved voice notes are placeholder tones with their
+  words written down. The live transcriber is written and untested.
+- Nothing was tried on a real phone, a real hotspot or a real microphone.
+- The holdout reports do not exist yet, so there is no holdout result.
+- The larger model has not been run with the current prompt.
+- The WhatsApp tool was tested only on fake exports.
+- The Elm lookup, the notifications and the Elm view are simulated and
+  labelled so on screen. Deadlines are trial values.
 
 **Larger model.** The owner plans to use the larger model for the demo.
 `DEFAULT_MODEL` stays `claude-haiku-5-5` until the holdout comparison has run
-(owner's decision). The larger model has not been run with the current prompt.
-The comparison on the main reports ran once and is not repeated. The owner
-approved one more: `python benchmark.py --compare-holdout claude-sonnet-5-5`,
-both models on the holdout reports only. The command is built and tested
-offline. It refuses to run while there are no holdout reports, and refuses a
-second run. Run it once, when the owner says the holdout files are in.
+(owner's decision). The comparison on the main reports ran once and is not
+repeated. The owner approved one more: `python benchmark.py --compare-holdout
+claude-sonnet-5-5`, both models on the holdout reports only. It refuses to run
+while there are no holdout reports, and refuses a second run. Run it once, when
+the owner says the holdout files are in.
 
-The owner's teammates will write the holdout reports. None existed on
-25 November 2026.
+Next, when the owner says so: their answers to `MORNING_REPORT.md`, the holdout
+comparison when the files exist, real voice recordings and the speech-to-text
+key, then a rehearsal on the real laptop and phones.
 
-Next: the holdout comparison when the files exist, the owner's answers above,
-then step 5 (speech to text) when the owner says so. Do not start Phase 2 until
-Phase 1 works and the owner says so.
-
-Confirmed by the owner on 25 November 2026:
+Confirmed by the owner on 25 November 2026 (before the run):
 
 - Confidence has two levels, `high` and `low`.
 - A room, elevator or floor without its number counts as "location missing" and
@@ -103,19 +83,36 @@ Confirmed by the owner on 25 November 2026:
 - No refusal fallback to another model: a refusal becomes a flagged report.
 - The number parser covers Arabic only. A number spoken in Urdu words goes to
   the supervisor, for now.
-- Merging: the window is 60 minutes, counted from the incident's latest message
-  (`MERGE_WINDOW_MINUTES` in `rasd/incidents.py`). A report that needs supervisor
-  confirmation never merges and nothing merges into it. A common area never
-  merges. An incident is as urgent as its most urgent message.
-- A new report about an incident that is already closed opens a new incident
-  (`Incident.closed_at`). Nothing closes an incident until Phase 2.
+- Merging: the window is 60 minutes, counted from the incident's latest message.
+  A report that needs supervisor confirmation never merges and nothing merges
+  into it. A common area never merges. An incident is as urgent as its most
+  urgent message. A new report about a closed incident opens a new one.
 - The benchmark never prints the text of holdout reports; `--compare MODEL`
   replaced `--model`; the benchmark retries up to 6 times when the API says
-  slow down (the live system keeps 2).
+  slow down.
 - The prompt lists the dialect words for 11 to 19, and a room number whose
   exact digits are written in the message is confirmed.
-- Priority: the four levels, the per-type table, the journey stage and the five
-  risks, as written in "Agreed design".
+- Priority comes from the team's tables, not from the model. **This is a team
+  decision based on the pilgrim's journey. It is not tuning to the test.**
+
+Set by the owner in the overnight instructions (25 November 2026):
+
+- A sixth risk, immediate physical danger (`danger`). A partial fault is one
+  level below its default, only when the message says so.
+- Critical: acknowledge in 5 minutes, close in 30 (trial values). New types
+  are owned by pilgrim affairs; `unclear` is urgent; the stage is Makkah days.
+- The hotel is its own field. Types: gifts or distributions, no Nusuk card at
+  all, forgot app password or passport number, and "not a report".
+- The big screen shows only the first letter of a name and the report number,
+  never a photo. Passport and visa numbers never reach the model, a log or the
+  big screen.
+- Ask-back: at most one short Arabic question per report; the reply completes
+  the same report.
+- A chat reply such as "found it" never closes anything. A case closes only
+  through Rasd's close action, with a time stamp and who closed it.
+- Lost pilgrim: two reports from the same hotel within 15 minutes are one case.
+- No real pilgrim data and no real Nusuk card, ever. Simulated parts are
+  labelled on screen.
 
 ## How to work
 
@@ -211,21 +208,22 @@ Confirmed by the owner on 25 November 2026:
   Unit tests use made-up messages and room numbers, never the benchmark's.
 - **Priority** (the field and CSV column are named `urgency`): the model is not
   asked for it. Four levels: `critical`, `urgent`, `medium`, `normal`.
-  `routing.priority_for` works it out in three steps. (1) The type's default,
-  from the team-editable `PRIORITY_BY_TYPE`: lost pilgrim or one who cannot
-  communicate, and sick pilgrim or stated health risk, are critical; lost Nusuk
-  card, AC or water outage, electricity or elevator fault are urgent; luggage
-  is medium; cleaning and gifts not received are normal. (2) The journey stage,
-  which the ops room sets by hand (`CURRENT_STAGE`: arrival, makkah, hajj,
-  departure): during the Hajj days a lost Nusuk card is critical, because the
-  card is needed to enter the holy sites and the transport. (3) Each risk the
-  message states explicitly raises it one level, up to critical: elderly, sick,
-  medication, a time limit such as a group moving soon, a pilgrim alone or
-  lost. The model reports each risk with the words of the message that state
-  it, and our code checks those words are in the message. The benchmark always
-  scores with `data.EXPECTED_STAGE`, not with the live stage.
-- **Duplicate merging** (step 3): same type, same place, within a configurable
-  window becomes one incident with a message count. No location or unclear type
+  `routing.priority_for` works it out in four steps. (1) The type's default,
+  from the team-editable `PRIORITY_BY_TYPE`. (2) The journey stage, which the
+  ops room sets by hand (`CURRENT_STAGE`): during the Hajj days a lost Nusuk
+  card is critical. (3) A fault the message says is partial goes one level
+  down. (4) Each risk the message states explicitly raises it one level, up to
+  critical: elderly, sick, medication, a time limit, a pilgrim alone or lost,
+  immediate physical danger. The model reports each risk with the words of the
+  message that state it, and our code checks those words are in the message.
+  The benchmark always scores with `data.EXPECTED_STAGE`, not the live stage.
+- **Checks on what the model returns**: a room number is re-read by our parser;
+  a hotel or a name must be in the message (a short word glued to its front is
+  allowed: "بدار المنارة"); a mismatch sends the report to the supervisor.
+- **Duplicate merging** (step 3): same type, same hotel and place, within a
+  configurable window becomes one incident with a message count. A lost pilgrim
+  has no room: same hotel within 15 minutes, unless the reports give different
+  names or rooms. No location or unclear type
   never merges. A closed incident takes no more reports. `add_report` places one
   report as it arrives (for the live system); `group_reports` does a whole list
   (for the benchmark).
@@ -248,14 +246,27 @@ Confirmed by the owner on 25 November 2026:
   record 50 voice messages. No real recordings exist yet, so any synthetic
   audio test only proves the plumbing, not accuracy.
 
-## Phase 2 notes (not started)
+## The demo pages (built in the overnight run)
 
-- Phone page opened by QR code: record button, text box as fallback.
-- After sending, the phone shows the transcript and the extracted room, with a
-  one-tap way to correct the room before the report reaches the board.
-- Big screen: New, Routed, Escalated, Closed columns, with a countdown each.
-- The sender gets a reference number; status updates on the phone on closing.
-- A report is closed by uploading a photo from a phone.
-- Everything runs on one laptop over a phone hotspot. No WhatsApp dependency.
-- Phone browsers only allow microphone recording on a secure connection, so
-  plain HTTP over the hotspot will not work for the record button; plan for it.
+- Run for phones on a hotspot: `python -m demo.run` (https with a certificate
+  made on the laptop, because phone browsers record only on a secure
+  connection). Plain run: `python -m uvicorn app.main:app`.
+- Page handlers are plain `def` functions on purpose: each request runs on its
+  own thread, so a slow reading never blocks the board or the replay switch.
+  Do not make them `async` again.
+- What the big screen may show is decided in one place, `Store.board` in
+  `app/store.py`: no full name, no number, no words of a message, no photo, no
+  hotel name that is not in the team's list. The supervisor page
+  (`/supervisor`) is the only page that shows message text.
+- Every Arabic sentence of the pages is in `app/copy.py`.
+- The scene's words have one source, `demo/scene.py`. After changing them run
+  `python -m demo.make_scene_assets`, `python -m demo.record_scene` (three
+  paid calls) and the tests.
+- `/operator` and `/supervisor` have no password: the hotspot password is the
+  only protection.
+- `whatsapp_count/` must stay standard-library only and import nothing from
+  the project. Two tests fail if it loads a network library.
+
+Not built: correcting the room on the phone before the report reaches the
+board, status updates back to the sender, closing by uploading a photo, a QR
+code for the phone page, a button for the journey stage.

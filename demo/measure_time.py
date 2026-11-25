@@ -9,12 +9,12 @@ sent first; then the clock starts, the pilgrim's note is sent, and the clock
 stops when the board (which asks the server once a second) shows one case with
 two reports. The report is printed in Arabic and saved in measurements/.
 
-What it cannot measure today: live speech to text. Without RASD_OPENAI_KEY the
-words come from the saved transcript, and the report says so.
+What it does not measure: live speech to text. The words of the saved voice
+notes come from the saved transcript, and the report says so. The operator
+page shows the measured time of every voice note that really arrives.
 """
 
 import argparse
-import os
 import random
 import sys
 import tempfile
@@ -66,7 +66,7 @@ def render(runs: list[dict], speech_live: bool, replay: bool, cost: float, refre
     if speech_live:
         lines.append("تحويل الصوت إلى نص: مباشر، وداخل في القياس.")
     else:
-        lines.append("تحويل الصوت إلى نص: لم يدخل في القياس. لا مفتاح للخدمة، فأُخذ النص من ملف محفوظ.")
+        lines.append("تحويل الصوت إلى نص: لم يدخل في القياس. نص الرسالتين المحفوظتين أُخذ من ملف محفوظ.")
     lines.append("")
     for number, run in enumerate(runs, start=1):
         took = run["seconds"] or {}
@@ -103,7 +103,6 @@ def main() -> None:
     from demo import scene
     from rasd.cost import cost_usd
     from rasd.understand import DEFAULT_MODEL
-    from rasd.voice import OPENAI_KEY_VARIABLE
 
     spent = {"input": 0, "output": 0}
     if options.replay:
@@ -152,7 +151,10 @@ def main() -> None:
         server.should_exit = True
         thread.join(timeout=5)
 
-    speech_live = bool(os.environ.get(OPENAI_KEY_VARIABLE, "").strip()) and not options.replay
+    # The saved voice notes are known by their bytes, so their saved words are used and no
+    # speech-to-text call is made: live speech to text is never part of this measurement.
+    # For a note recorded on a phone, the operator page shows how long each part took.
+    speech_live = False
     text = render(runs, speech_live, options.replay, cost_usd(DEFAULT_MODEL, spent["input"], spent["output"]), BOARD_REFRESH_SECONDS)
     print(text)
     if not options.replay:

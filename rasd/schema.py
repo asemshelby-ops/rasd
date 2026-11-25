@@ -73,6 +73,7 @@ FLAG_REASONS = {
     "no_location": "المكان غير مذكور أو رقمه ناقص",
     "no_pilgrim": "لا يُعرف لمن البلاغ: لا اسم ولا غرفة",
     "number_not_confirmed": "رقم المكان لم يتأكد آلياً",
+    "hotel_not_confirmed": "فندق قرأه النموذج وليس في الرسالة",
     "risk_not_confirmed": "خطر قرأه النموذج ولم يتأكد آلياً",
     "partial_not_confirmed": "عطل جزئي قرأه النموذج ولم يتأكد آلياً",
     "low_confidence": "ثقة النموذج في فهمه منخفضة",

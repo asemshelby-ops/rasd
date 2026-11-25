@@ -9,6 +9,7 @@
   {% if reply %}<li class="bubble theirs" dir="auto">{{ reply }}{% if question %}<br><strong>{{ copy.QUESTION_FROM_RASD }}: {{ question }}</strong>{% endif %}</li>{% endif %}
 </ol>
 <p id="report-message" class="message" role="alert" hidden></p>
+<p><button type="button" id="resend" hidden>{{ copy.RESEND }}</button></p>
 {# A real form: with no script at all the browser posts it and the answer comes back in this page. #}
 <form id="composer" class="composer" method="post" action="/report" enctype="multipart/form-data">
   <label class="sending-from">{{ copy.SENDING_FROM }}
@@ -36,9 +37,9 @@
 {% endblock %}
 {% block scripts %}
 <script>window.RASD = {{ {
-  "sending": copy.SENDING, "sendFailed": copy.SEND_FAILED, "resend": copy.RESEND, "micBlocked": copy.MIC_BLOCKED,
+  "sendFailed": copy.SEND_FAILED, "resend": copy.RESEND, "micBlocked": copy.MIC_BLOCKED,
   "record": copy.RECORD, "stopAndSend": copy.STOP_AND_SEND, "heard": copy.HEARD, "empty": copy.EMPTY_MESSAGE,
-  "photoAttached": copy.ATTACH_PHOTO, "showCard": copy.SHOW_CARD, "mockCard": copy.MOCK_CARD_NOTE
+  "mockCard": copy.MOCK_CARD_NOTE, "wrong": copy.SOMETHING_WRONG
 } | tojson }};</script>
 <script src="/static/report.js"></script>
 {% endblock %}

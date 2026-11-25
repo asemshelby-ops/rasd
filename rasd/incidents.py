@@ -36,7 +36,9 @@ only shows one card too many on the board.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from rasd.numbers import normalise
 from rasd.schema import URGENCIES
+from rasd.text import arabic_letters
 from rasd.understand import Understanding
 
 # How long after the latest message of an incident a new message about the same
@@ -63,6 +65,7 @@ class Incident:
     stays_alone: bool = False  # True: its report could not be merged, so nothing may join it either
     closed_at: datetime | None = None  # set by close_incident(); then the incident takes no more reports
     closed_by: str | None = None  # who closed it
+    pilgrim_name: str | None = None  # the first name a report gave; only used to tell two lost pilgrims apart
 
     @property
     def message_count(self) -> int:
@@ -85,8 +88,19 @@ def _may_take(incident: Incident, report: Understanding, sent_at: datetime, wind
     )
 
 
+def _same_words(a: str, b: str) -> bool:
+    return normalise(arabic_letters(a)) == normalise(arabic_letters(b))
+
+
 def _same_lost_pilgrim(incident: Incident, report: Understanding, sent_at: datetime) -> bool:
-    """True when this open case is a lost pilgrim at the same hotel, reported a short while ago."""
+    """True when this open case is a lost pilgrim at the same hotel, reported a short while ago.
+
+    Two reports that give two different names, or two different rooms, are two pilgrims.
+    """
+    if incident.pilgrim_name and report.pilgrim_name and not _same_words(incident.pilgrim_name, report.pilgrim_name):
+        return False
+    if incident.loc_number and report.loc_number and incident.loc_number != report.loc_number:
+        return False
     return (
         incident.type == report.type == "lost_pilgrim"
         and incident.closed_at is None
@@ -118,6 +132,8 @@ def add_report(
             incident.report_ids.append(report_id)
             incident.last_at = sent_at
             incident.urgency = min(incident.urgency, report.urgency, key=_MOST_URGENT_FIRST.index)
+            incident.pilgrim_name = incident.pilgrim_name or report.pilgrim_name
+            incident.loc_number = incident.loc_number or (report.loc_number if report.type == "lost_pilgrim" else None)
             return incident
     incident = Incident(
         type=report.type,
@@ -129,6 +145,7 @@ def add_report(
         first_at=sent_at,
         last_at=sent_at,
         stays_alone=not can_merge(report),
+        pilgrim_name=report.pilgrim_name,
     )
     incidents.append(incident)
     return incident

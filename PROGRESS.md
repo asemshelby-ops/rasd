@@ -24,7 +24,8 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
 | Stage 4: recording the scene's readings (3 calls) | 0.0016 |
 | Stage 4: voice-to-board measurement, three runs (6 calls) | 0.0038 |
 | Stage 4: one browser check that ran live by mistake (4 calls) | 0.0019 |
-| **Total so far** | **0.1890** |
+| Stage 6: one final benchmark run | 0.0292 |
+| **Total for the night** | **0.2182** |
 
 ## Stages
 
@@ -35,7 +36,7 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
 | 3 | The demo scene: reporting page, board, lost-card flow, Elm view, before-and-after page | DONE |
 | 4 | Demo safety: voice-to-board time, replay switch, Windows steps, scenario card, risk tests | DONE |
 | 5 | Local WhatsApp counting tool | DONE |
-| 6 | Code review, final benchmark, MORNING_REPORT.md | NEXT |
+| 6 | Code review, final benchmark, MORNING_REPORT.md | DONE |
 
 ## Stage notes
 
@@ -140,3 +141,22 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
 - No API calls in this stage.
 - Tests: 783 passed.
 - Next: stage 6.
+
+### Stage 6: DONE
+
+- Code review of the whole project (`superpowers:requesting-code-review`):
+  3 critical and 13 important findings. Fixed and tested: see QUESTIONS.md 67
+  to 79. Not fixed, with reasons: QUESTIONS.md 80.
+- Tests: 847 passed.
+- Final benchmark, one run (`measurements/stage6_final_benchmark.txt`), 58
+  messages:
+  - wrong and not sent to the supervisor (confident mistakes): 0 of 58
+  - wrong and sent to the supervisor: 1 (report 15, place kind)
+  - needless referrals: 0
+  - all fields right: 57 of 58
+  - spoken room numbers: 15 of 15; non-reports recognised: 6 of 6; real
+    reports dropped: 0; right question asked: 6 of 6
+  - duplicate grouping: 52 of 52 reports in their right incident
+  - cost: 0.0292 dollars
+- `MORNING_REPORT.md` written (Arabic). `CLAUDE.md` brought up to date.
+- All six stages are done. Nothing is left to continue.

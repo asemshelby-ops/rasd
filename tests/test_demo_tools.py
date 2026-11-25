@@ -143,3 +143,28 @@ def test_without_https_the_helper_warns_that_phones_cannot_record():
     text = "\n".join(address_lines(["192.168.43.120"], port=8000, https=False))
     assert "http://192.168.43.120:8000/report" in text
     assert "cannot record" in text
+
+
+# --- what the code review found (stage 6) --------------------------------------------------------------------
+
+
+def test_making_the_scene_files_again_never_overwrites_a_recorded_voice_note(tmp_path, monkeypatch):
+    from demo import make_scene_assets
+
+    monkeypatch.setattr(make_scene_assets, "SCENE_DIR", tmp_path)
+    monkeypatch.setattr(make_scene_assets, "draw_mock_card", lambda path: path.write_bytes(b"\x89PNG"))
+    (tmp_path / make_scene_assets.COUNTER_FILE).write_bytes(b"the team's own recording")
+    make_scene_assets.main()
+    assert (tmp_path / make_scene_assets.COUNTER_FILE).read_bytes() == b"the team's own recording"
+    assert (tmp_path / make_scene_assets.PILGRIM_FILE).exists()  # the missing one got its placeholder
+
+
+def test_in_replay_a_card_photo_from_a_phone_goes_to_the_live_reader():
+    from app.engine import ReplayEngine
+
+    class Live:
+        def read_card(self, image, media_type):
+            return "read by the live reader"
+
+    assert ReplayEngine(otherwise=lambda: Live()).read_card(b"a phone photo", "image/jpeg") == "read by the live reader"
+    assert ReplayEngine().read_card(b"a phone photo", "image/jpeg") is None

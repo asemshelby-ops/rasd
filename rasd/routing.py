@@ -15,6 +15,7 @@ fitted to the test reports.
 """
 
 from rasd.numbers import normalise, unglued
+from rasd.text import arabic_letters
 from rasd.schema import RISKS, STAGES, URGENCIES
 
 OWNER_BY_TYPE = {
@@ -74,12 +75,11 @@ HOTELS = ["واحة الروضة", "برج السكينة", "دار المنار
 HOTELS_ARE_SAMPLE_DATA = True
 
 _HOTEL_WORDS = {"فندق", "الفندق", "بفندق", "hotel", "هوتيل", "اوتيل", "هوٹل"}
-_URDU_LETTERS = str.maketrans({"ک": "ك", "ی": "ي", "ہ": "ه", "ھ": "ه", "ے": "ي"})
 
 
 def _folded(text: str) -> list[str]:
     """The words of a hotel name with one spelling per letter, Arabic or Urdu, without the word "hotel"."""
-    return [word for word in normalise(text.translate(_URDU_LETTERS)).lower().split() if word not in _HOTEL_WORDS]
+    return [word for word in normalise(arabic_letters(text)).lower().split() if word not in _HOTEL_WORDS]
 
 
 def match_hotel(text: str) -> str | None:

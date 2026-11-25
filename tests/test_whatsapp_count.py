@@ -404,3 +404,89 @@ def test_no_file_of_the_tool_imports_a_network_library_anywhere():
                 assert not prefixes & NETWORK_MODULES, f"{file.name} imports {name}"
             if isinstance(node, ast.Call) and getattr(node.func, "id", "") in ("__import__", "exec", "eval"):
                 raise AssertionError(f"{file.name} calls {node.func.id}")
+
+
+# --- what the code review found (stage 6) --------------------------------------------------------------------
+
+
+def test_a_line_whose_date_cannot_be_read_is_not_glued_to_the_message_before_it():
+    text = "05/06/2026, 09:05 - أحمد: المكيف خربان\n25/06/2026, 09:06 - سالم العتيبي: تم\n"
+    parsed = parse_export(text, month_first=True)  # the wrong order on purpose: 25 is not a month
+    assert [m.text for m in parsed.messages] == ["المكيف خربان"]
+    assert "سالم العتيبي" not in parsed.messages[0].text
+    assert parsed.unread_lines == 1
+
+
+def test_the_command_stops_when_most_dates_cannot_be_read(tmp_path, capsys):
+    export = tmp_path / "group.txt"
+    export.write_text(iphone(), encoding="utf-8")  # day first; 23 is not a month
+    assert main([str(export), "--month-first"]) != 0
+    assert "dates" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("header", ["04/07/1448 هـ, 09:05 - A: one", "04/07/1448 AH, 09:05 - A: one", "[04/07/1448 هـ, 09:05:00] A: one"])
+def test_a_hijri_date_with_its_era_mark_is_read(header):
+    assert len(messages(header + "\n")) == 1
+
+
+def test_a_hotel_word_must_be_a_word_and_be_followed_by_a_name():
+    assert not names_hotel("برجع لكم بعد شوي")
+    assert not names_hotel("المكيف خربان في الفندق")
+    assert names_hotel("المكيف خربان في فندق الواحة")
+
+
+def test_a_bare_room_number_counts_as_a_room():
+    assert names_room("مكيف 318 خربان")
+    assert not names_room("الباص يتحرك 9:30")
+    assert not names_room("وصل 45 حاج")
+
+
+def test_praise_with_the_word_ma_is_not_a_report():
+    assert not looks_like_report("ما شاء الله الوجبات ممتازة")
+    assert looks_like_report("الوجبات ما وصلت")
+
+
+def hand_check_rows(tmp_path, texts):
+    read = messages(android_english([(i, "أ", text) for i, text in enumerate(texts)]))
+    path = tmp_path / "check.csv"
+    write_sample(read, path, size=50, seed=1)
+    return read, path, list(csv.DictReader(path.open(encoding="utf-8-sig")))
+
+
+def test_a_message_that_starts_like_a_spreadsheet_formula_is_written_as_plain_text(tmp_path):
+    _, _, rows = hand_check_rows(tmp_path, ['=HYPERLINK("http://example.invalid","x")', "+966 55 123 4567 جواله", "-1 مكيف", "@all الحضور"])
+    assert len(rows) == 4
+    assert not any(row["text"].lstrip()[:1] in ("=", "+", "-", "@") for row in rows)
+    assert rows[0]["text"].startswith("'=")
+
+
+def test_phone_numbers_written_in_groups_and_passport_numbers_are_masked(tmp_path):
+    _, path, _ = hand_check_rows(tmp_path, ["جواله +966 55 123 4567", "رقمه 055 123 4567", "جوازه AB123456", "غرفة 412"])
+    everything = path.read_text(encoding="utf-8-sig")
+    assert "4567" not in everything and "AB123456" not in everything
+    assert "412" in everything  # a room number stays: the owner needs it to judge
+
+
+def test_the_check_value_can_never_be_mistaken_for_a_number_by_a_spreadsheet(tmp_path):
+    _, _, rows = hand_check_rows(tmp_path, [f"رسالة {i}" for i in range(40)])
+    assert all(row["check"].startswith("h") for row in rows)
+
+
+def test_a_marked_file_saved_with_semicolons_is_still_read(tmp_path):
+    read, path, rows = hand_check_rows(tmp_path, ["المكيف خربان", "حاضر"])
+    with path.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=list(rows[0]), delimiter=";")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({**row, "report": "y" if looks_like_report(read[int(row["id"])].text) else "n"})
+    assert score(read, path).agree == 2
+
+
+def test_a_marked_file_in_an_old_windows_arabic_encoding_is_still_read(tmp_path):
+    read, path, rows = hand_check_rows(tmp_path, ["المكيف خربان", "حاضر"])
+    with path.open("w", encoding="cp1256", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=list(rows[0]))
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({**row, "report": "نعم" if looks_like_report(read[int(row["id"])].text) else "لا"})
+    assert score(read, path).agree == 2

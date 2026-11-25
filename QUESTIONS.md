@@ -192,9 +192,10 @@ what was chosen, why, and how to change it.
 51. **Https on the hotspot** uses a certificate the laptop makes itself
     (`python -m demo.run`). Phones show a warning once. It was checked here
     with a browser on the same machine, not with a real phone on a hotspot.
-52. **A voice note in which live speech-to-text hears nothing falls back to
-    the saved words**, so the placeholder tones still play the scene after a
-    key is added.
+52. **A saved voice note uses its saved words first** (changed in stage 6
+    after the review): it is known by its bytes, so no speech-to-text call is
+    made for it, and the placeholder tones play the scene with or without a
+    key. The timing tool therefore never measures live speech to text.
 53. **Upload limits are my choice**: 4 MB for a photo (after the phone has made
     it smaller), 15 MB for a voice note.
 54. **Roles on the scenario card**: the judge plays the counter employee and
@@ -240,4 +241,79 @@ what was chosen, why, and how to change it.
     as text.
 66. **The tool was tested only on fake exports I wrote** (Android and iPhone
     styles, both digit styles). No real export was available, by design.
+
+## Stage 6
+
+`superpowers:requesting-code-review` ran on the whole project (a separate
+reviewer that was told not to open the holdout folder and not to call any API).
+It found 3 critical and 13 important issues. What I did with them:
+
+67. **Fixed, critical: one slow reading froze the whole site**, the board and
+    the replay switch included. The page handlers are now plain functions, so
+    each request runs on its own. A test with a real server and a slow reader
+    guards it.
+68. **Fixed, critical: with no key, or an engine that could not start, a
+    report got an error page and was not saved.** It is now saved and goes to
+    the supervisor. The operator's "saved scene" check now really builds the
+    replay engine.
+69. **Fixed, critical: three privacy holes.** (a) The sending page's hotel is
+    taken only from the team's list. (b) A number in an ask-back reply is a
+    room only when the reply is the number alone or names the place; passport
+    and phone numbers are taken out of the reply first. (c) The redaction now
+    also hides numbers written with spaces or dashes, after "جواز السفر" or
+    "رقمه", with letters mixed in, and mobile numbers written in groups.
+70. **Fixed: a hotel the model gives that is not in the message** now sends the
+    report to the supervisor (new reason `hotel_not_confirmed`), like a room
+    number that cannot be confirmed. A hotel name that is not in the team's
+    list is not written on the board; the board says «فندق غير مسجّل في القائمة».
+71. **Fixed: ask-back took "ما اعرف اسمه" as a name.** A reply that says the
+    sender does not know, or will answer later, changes nothing.
+72. **Fixed: the card step** is accepted only for an open lost-pilgrim case;
+    the hidden card button is really hidden; the button says «صوّر البطاقة
+    التجريبية».
+73. **New: a supervisor page (`/supervisor`)** shows each waiting report with
+    why it waits and its words, numbers hidden. Before this a report "sent to
+    the supervisor" could not be read by anyone. It is not for the big screen
+    and, like `/operator`, has no password.
+74. **Fixed: a lost-card report the supervisor confirms** now gets its 24-hour
+    clock, counted from the report.
+75. **Fixed: two lost pilgrims at one counter** stay two cases when their
+    reports give different names or different rooms.
+76. **Fixed: the number on the board label is the number the sender was told.**
+    The words of a message that is not a report are no longer kept.
+77. **Fixed: the sending page on a bad network**: a "send again" button that
+    sends the same message, an error with no text still says something, a
+    browser without `fetch` falls back to the plain form, and a recording is
+    named after what the phone really recorded.
+78. **Fixed: messages over 2,000 characters are not sent to the model** (cost
+    and time); they go to the supervisor. Failures are now written to the
+    console by their kind, never with message text.
+79. **Fixed in the WhatsApp tool**: a line with an impossible date is left out
+    and counted instead of being glued to the message above (which put a
+    sender's name into text); the tool stops when most dates cannot be read;
+    Hijri dates with an era mark; "برجع" is no longer a hotel; a bare 3 or
+    4 digit number is a room; "ما شاء الله" is no longer a cue; the hand-check
+    file cannot hold a spreadsheet formula, masks grouped phone numbers and
+    passport-like numbers, and is read back in either encoding and with
+    commas or semicolons.
+80. **Not fixed, and why.**
+    - A waiting case that is past its time stays in the "waiting" column; its
+      clock does say «تأخرت». Moving it would hide that it still needs the
+      supervisor. The team should decide.
+    - On the no-script page a question from Rasd is shown but cannot be
+      answered there; the supervisor follows it up.
+    - A hotel name misspelt by one letter (as speech-to-text may do) is an
+      unlisted hotel: it is not merged with the right one. No fuzzy matching
+      was added, because a wrong guess of the hotel is worse.
+    - The scene's words still live in three files (`demo/scene.py`,
+      `transcripts.json`, `saved_readings.json`). Tests and the operator check
+      now catch a mismatch, and the guide names the one place to edit.
+    - "لقينا الحاج التايه" is counted as a new report by the WhatsApp tool,
+      not as a closing reply.
+    - `rasd.db` holds message text and the private numbers unencrypted on the
+      laptop (it is never committed). Delete it after the demo.
+    - Smaller notes left as they are: `requirements.txt` is not pinned to exact
+      versions; `python -m demo.run` is the supported way to start the site.
+81. **Final benchmark** (one run, after the fixes): 0 confident mistakes, all
+    fields right on 57 of 58, saved in `measurements/stage6_final_benchmark.txt`.
 

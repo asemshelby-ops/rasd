@@ -82,4 +82,11 @@ class ReplayEngine:
         return self.transcripts.transcribe(audio, filename)
 
     def read_card(self, image: bytes, media_type: str) -> CardReading | None:
-        return self.card if hashlib.sha256(image).hexdigest() == self.card_key else None
+        if hashlib.sha256(image).hexdigest() == self.card_key:
+            return self.card
+        if self.otherwise is not None:  # a photo taken by a phone is not the saved file: the live reader tries
+            try:
+                return self.otherwise().read_card(image, media_type)
+            except Exception:
+                pass
+        return None

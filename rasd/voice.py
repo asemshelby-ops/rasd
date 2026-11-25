@@ -96,12 +96,12 @@ class FirstThatWorks:
         self.transcribers = transcribers
 
     def transcribe(self, audio: bytes, filename: str) -> str:
-        problem, heard_nothing = VoiceError("no transcriber is set up"), False
+        problem, first_problem, heard_nothing = VoiceError("no transcriber is set up"), None, False
         for transcriber in self.transcribers:
             try:
                 text = transcriber.transcribe(audio, filename)
             except VoiceError as e:
-                problem = e
+                problem = first_problem = first_problem or e  # the first failure says the most
                 continue
             if text.strip():
                 return text
@@ -114,9 +114,10 @@ class FirstThatWorks:
 def make_transcriber(saved_folder: Path | None = None) -> Transcriber:
     """The transcriber for this machine: live if the key is set, with the saved notes as a fallback."""
     parts = []
+    # A saved voice note is known by its bytes, so its saved words come first: no call is made for it.
+    if saved_folder is not None and (saved_folder / "transcripts.json").exists():
+        parts.append(SavedTranscripts.from_folder(saved_folder))
     key = os.environ.get(OPENAI_KEY_VARIABLE, "").strip()
     if key:
         parts.append(OpenAITranscriber(key))
-    if saved_folder is not None and (saved_folder / "transcripts.json").exists():
-        parts.append(SavedTranscripts.from_folder(saved_folder))
     return FirstThatWorks(*parts) if parts else NoTranscriber()

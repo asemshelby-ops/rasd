@@ -23,7 +23,7 @@ from rasd.cases import replacement_request
 from rasd.display import screen_label
 from rasd.incidents import Incident, add_report, can_merge, close_incident
 from rasd.privacy import PrivateNumbers
-from rasd.routing import ACKNOWLEDGE_MINUTES, DEADLINE_MINUTES, OWNER_BY_TYPE
+from rasd.routing import ACKNOWLEDGE_MINUTES, DEADLINE_MINUTES, HOTELS, OWNER_BY_TYPE
 from rasd.schema import URGENCIES
 from rasd.understand import Understanding
 
@@ -66,6 +66,12 @@ def _report_from_json(text: str) -> Understanding:
     for name in ("reasons", "risks", "risk_words"):
         fields[name] = tuple(fields[name])
     return Understanding(**fields)
+
+
+def _screen_hotel(hotel: str | None) -> str | None:
+    """A hotel as the big screen may show it. A name that is not in the team's list is words
+    from a message (it could be a person's name), so the screen only says that it is not listed."""
+    return hotel if hotel is None or hotel in HOTELS else copy.UNLISTED_HOTEL
 
 
 def _incident_to_json(incident: Incident) -> str:
@@ -131,7 +137,8 @@ class Store:
         with self.lock, self.db:
             report_id = self.db.execute(
                 "insert into reports (received_at, reporting_hotel, source, safe_text, report) values (?, ?, ?, ?, ?)",
-                (received_at.isoformat(), reporting_hotel, source, safe_text, _report_to_json(report)),
+                # The words of a message that is not a report are not kept: only that it came.
+                (received_at.isoformat(), reporting_hotel, source, safe_text if report.is_report else "", _report_to_json(report)),
             ).lastrowid
             if not report.is_report:
                 return report_id, None, False
@@ -139,9 +146,10 @@ class Store:
             rows = self.db.execute("select id, incident from cases order by id").fetchall()
             incidents = [_incident_from_json(row["incident"]) for row in rows]
             incident = add_report(incidents, report_id, received_at, report)
-            joined = incident in incidents[: len(rows)]
+            position = next((i for i, known in enumerate(incidents[: len(rows)]) if known is incident), None)
+            joined = position is not None
             if joined:
-                case_id = rows[incidents.index(incident)]["id"]
+                case_id = rows[position]["id"]
                 self.db.execute("update cases set incident = ? where id = ?", (_incident_to_json(incident), case_id))
             else:
                 case_id = self.db.execute(
@@ -208,6 +216,7 @@ class Store:
                         loc_kind=completed.loc_kind,
                         loc_number=completed.loc_number,
                         urgency=completed.urgency,
+                        pilgrim_name=completed.pilgrim_name or incident.pilgrim_name,
                         stays_alone=not can_merge(completed),
                     )
                     self.db.execute(
@@ -227,20 +236,34 @@ class Store:
         return _incident_from_json(row["incident"])
 
     def confirm(self, case_id: int, who: str, at: datetime) -> None:
+        """The supervisor confirms a waiting case. What waited for that (a lost card's 24-hour clock) starts now."""
         with self.lock, self.db:
             self._incident(case_id)
             self.db.execute("update cases set waiting = 0 where id = ?", (case_id,))
+            rows = self.db.execute("select received_at, report from reports where case_id = ? order by id", (case_id,)).fetchall()
+            for row in rows:
+                confirmed = replace(_report_from_json(row["report"]), needs_confirmation=False)
+                self._absorb(case_id, confirmed, datetime.fromisoformat(row["received_at"]))  # counted from the report
             self._log(case_id, at, who, "confirmed")
+
+    def is_open_lost_pilgrim(self, case_id: int) -> bool:
+        with self.lock:
+            row = self.db.execute("select incident from cases where id = ?", (case_id,)).fetchone()
+        if row is None:
+            return False
+        incident = _incident_from_json(row["incident"])
+        return incident.type == "lost_pilgrim" and incident.closed_at is None
 
     def acknowledge(self, case_id: int, who: str, at: datetime) -> None:
         with self.lock, self.db:
             if self._incident(case_id).closed_at is not None:
                 raise CaseClosed
-            self.db.execute(
+            changed = self.db.execute(
                 "update cases set acknowledged_at = ?, acknowledged_by = ? where id = ? and acknowledged_at is null",
                 (at.isoformat(), who, case_id),
-            )
-            self._log(case_id, at, who, "acknowledged")
+            ).rowcount
+            if changed:  # the first acknowledgement is the one that counts, and the only one logged
+                self._log(case_id, at, who, "acknowledged")
 
     def close(self, case_id: int, who: str, at: datetime) -> None:
         """Closes a case through the one close action, which records the time and who closed it."""
@@ -304,9 +327,10 @@ class Store:
         replacement = json.loads(row["replacement"]) if row["replacement"] else None
         return {
             "id": row["id"],
-            "label": screen_label(row["id"], row["pilgrim_name"]),
+            # The number on the label is the one the first sender was told ("وصل البلاغ 7").
+            "label": screen_label(incident.report_ids[0], row["pilgrim_name"]),
             "type": copy.TYPES[incident.type],
-            "place": copy.place_text(incident.hotel, incident.loc_kind, incident.loc_number),
+            "place": copy.place_text(_screen_hotel(incident.hotel), incident.loc_kind, incident.loc_number),
             "priority": incident.urgency,
             "priority_label": copy.URGENCIES[incident.urgency],
             "owner": copy.OWNERS[OWNER_BY_TYPE[incident.type]],
@@ -326,6 +350,20 @@ class Store:
             "replacement_due": replacement["due_at"] if replacement else None,
         }
 
+    def waiting(self, now: datetime) -> list[dict]:
+        """For the supervisor's own page: each waiting case, why it waits, and the words of its messages.
+
+        The words have their passport and visa numbers hidden. This never goes to the big screen.
+        """
+        waiting = [case for case in self.board(now) if case["state"] == "waiting"]
+        with self.lock:
+            for case in waiting:
+                rows = self.db.execute("select safe_text, report from reports where case_id = ? order by id", (case["id"],)).fetchall()
+                case["messages"] = [row["safe_text"] for row in rows]
+                reasons = [reason for row in rows for reason in _report_from_json(row["report"]).reasons]
+                case["reasons"] = [copy.FLAG_REASONS[reason] for reason in dict.fromkeys(reasons)]
+        return waiting
+
     def notifications(self) -> list[dict]:
         with self.lock:
             rows = self.db.execute("select case_id, at, text from notifications order by id desc").fetchall()
@@ -338,23 +376,25 @@ class Store:
 
     def replacement(self, case_id: int) -> dict | None:
         with self.lock:
-            row = self.db.execute("select id, pilgrim_name, replacement from cases where id = ?", (case_id,)).fetchone()
+            row = self.db.execute("select id, incident, pilgrim_name, replacement from cases where id = ?", (case_id,)).fetchone()
         if row is None or not row["replacement"]:
             return None
         saved = json.loads(row["replacement"])
-        return {"pilgrim": screen_label(row["id"], row["pilgrim_name"]), **saved}
+        saved["hotel"] = _screen_hotel(saved["hotel"])
+        first_report = _incident_from_json(row["incident"]).report_ids[0]
+        return {"pilgrim": screen_label(first_report, row["pilgrim_name"]), **saved}
 
     def replacements(self) -> list[dict]:
         """Every live replacement request, for the Elm view."""
         with self.lock:
-            rows = self.db.execute("select id, pilgrim_name, identified, replacement from cases where replacement is not null").fetchall()
+            rows = self.db.execute("select id, incident, pilgrim_name, identified, replacement from cases where replacement is not null").fetchall()
         requests = []
         for row in rows:
             found = json.loads(row["identified"]) if row["identified"] else None
             requests.append(
                 {
                     "company": found["company"] if found else copy.OUR_COMPANY,
-                    "label": screen_label(row["id"], row["pilgrim_name"]),
+                    "label": screen_label(_incident_from_json(row["incident"]).report_ids[0], row["pilgrim_name"]),
                     "due_at": json.loads(row["replacement"])["due_at"],
                     "live": True,
                     "simulated": False,

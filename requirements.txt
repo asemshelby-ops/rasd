@@ -1,5 +1,6 @@
 anthropic>=2.14,<3
 python-dotenv
+httpx2
 # The demo pages (app/): FastAPI, plain HTML pages, one SQLite file
 fastapi>=0.115
 uvicorn>=0.30

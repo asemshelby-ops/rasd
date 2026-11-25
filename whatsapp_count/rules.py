@@ -52,11 +52,16 @@ TOPIC_STEMS = [
 TOPIC_WORDS = ["ماء", "دوا", "دواه", "پاني", "لفٹ", "ac", "water", "luggage", "bag", "bags", "card"]
 
 CUE_WORDS = [
-    "ما", "مافي", "مافيه", "مو", "مش", "بدون", "ناقص", "ناقصه", "وين", "فين", "لسا", "للحين",
+    "مافي", "مافيه", "مو", "مش", "بدون", "ناقص", "ناقصه", "وين", "فين", "لسا", "للحين",
     "يحتاج", "تحتاج", "نحتاج", "محتاج", "محتاجه", "يبغي", "تبغي", "نبغي", "ابغي", "يبي", "نبي",
     "نہيں", "نهيں", "چاہيي", "no", "not", "need", "needs",
 ]  # fmt: skip
 CUE_STEMS = ["تاخر", "متاخر"]
+# "ما" alone proves nothing ("ما شاء الله"): it counts with the word after it.
+CUE_PHRASES = [
+    "ما وصل", "ما جا", "ما جت", "ما في", "ما فيه", "ما يشتغل", "ما تشتغل", "ما يبرد", "ما تبرد", "ما عند", "ما استلم",
+    "ما احد", "ما حد", "ما لقي", "ما يفتح", "ما تفتح", "ما يعرف", "ما تعرف", "ما يقدر", "ما تقدر", "ما اعط", "ما عط",
+]  # fmt: skip
 
 
 def _any(stems=(), words=(), phrases=()) -> re.Pattern:
@@ -65,20 +70,25 @@ def _any(stems=(), words=(), phrases=()) -> re.Pattern:
         parts.append(_FRONT + "(?:" + "|".join(re.escape(normalise(stem)) for stem in stems) + ")")
     if words:
         parts.append(_FRONT + "(?:" + "|".join(re.escape(normalise(word)) for word in words) + r")(?![\w])")
-    parts += [re.escape(normalise(phrase)) for phrase in phrases]
+    parts += [r"(?<![\w])" + re.escape(normalise(phrase)) for phrase in phrases]
     return re.compile("|".join(parts))
 
 
 _STRONG = _any(STRONG_STEMS, STRONG_WORDS, STRONG_PHRASES)
 _TOPIC = _any(TOPIC_STEMS, TOPIC_WORDS)
-_CUE = _any(CUE_STEMS, CUE_WORDS)
+_CUE = _any(CUE_STEMS, CUE_WORDS, CUE_PHRASES)
 
 # Words that say "this is a hotel".
 HOTEL_WORDS = ["فندق", "برج", "ابراج", "اوتيل", "هوتيل", "hotel", "ہوٹل"]
-_HOTEL = re.compile(_FRONT + "(?:" + "|".join(re.escape(normalise(word)) for word in HOTEL_WORDS) + ")")
+# The word must stand whole ("برجع" is not "برج") and a name must follow it ("في الفندق" names no hotel).
+_HOTEL = re.compile(_FRONT + "(?:" + "|".join(re.escape(normalise(word)) for word in HOTEL_WORDS) + r")(?![\w])\s+\w")
 
 # A room with its number: "غرفة 318", "الغرفة رقم 318", "room 204", or the number in words.
 _NUMBER_WORD = r"(?:مي[هت]|ميت|مئ|ثلاثمي|ثلثمي|اربعمي|خمسمي|ستمي|سبعمي|ثمانمي|ثمنمي|تسعمي|الف|واحد|اثنين|ثنتين|ثلاث|اربع|خمس|ست|سبع|ثمان|تسع|عشر)"
+# A phone number written in groups ("055 123 4567") must not be read as a room.
+_PHONE_LIKE = re.compile(r"\+?\d(?:[ \-]?\d){6,}")
+# A number of 3 or 4 digits standing alone is taken as a room ("مكيف 318 خربان"). Times such as 9:30 are not.
+_BARE_ROOM = re.compile(r"(?<![\w:.])\d{3,4}(?![\w:.])")
 _ROOM = re.compile(
     _FRONT + r"(?:غرف[هت]|روم|جناح|كمر[هي])\s*(?:رقم|نمبر)?\s*[:#]?\s*(?:\d{1,5}(?!\d)|" + _NUMBER_WORD + ")"
     + r"|(?<![\w])(?:room|suite)\s*(?:no\.?|number|#)?\s*\d{1,5}(?!\d)"
@@ -115,5 +125,6 @@ def names_hotel(text: str, hotels=()) -> bool:
 
 
 def names_room(text: str) -> bool:
-    """True when the message gives a room with its number."""
-    return bool(_ROOM.search(normalise(text)))
+    """True when the message gives a room with its number, or a bare number of 3 or 4 digits."""
+    clean = _PHONE_LIKE.sub(" ", normalise(text))
+    return bool(_ROOM.search(clean) or _BARE_ROOM.search(clean))

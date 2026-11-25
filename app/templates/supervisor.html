@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ copy.SUPERVISOR_TITLE }}{% endblock %}
+{% block body_class %}operator-page{% endblock %}
+{% block main %}
+<h1>{{ copy.SUPERVISOR_TITLE }}</h1>
+<p class="tag">{{ copy.SUPERVISOR_NOTE }}</p>
+{% for case in waiting %}
+<section class="panel" aria-labelledby="case-{{ case.id }}">
+  <h2 id="case-{{ case.id }}"><span class="chip chip-{{ case.priority }}">{{ case.priority_label }}</span> {{ case.label }}: {{ case.type }}</h2>
+  <p>{{ case.place }}. إلى: {{ case.owner }}</p>
+  <p><b>{{ copy.WHY_WAITING }}:</b> {{ case.reasons | join("، ") }}</p>
+  <p><b>{{ copy.MESSAGE_AS_SENT }}:</b></p>
+  {% for message in case.messages %}
+  <p class="bubble" dir="auto">{{ message if message else copy.NO_TEXT_KEPT }}</p>
+  {% endfor %}
+</section>
+{% else %}
+<p class="empty">{{ copy.NOTHING_WAITING }}</p>
+{% endfor %}
+<p><a class="button" href="/board">{{ copy.BACK_TO_BOARD }}</a></p>
+<p class="note">التأكيد والإغلاق من لوحة الحالات، ويُسجَّلان باسم من قام بهما.</p>
+{% endblock %}

@@ -18,13 +18,34 @@ from pathlib import Path
 from whatsapp_count.rules import looks_like_report
 
 COLUMNS = ["id", "text", "report", "check"]
-_LONG_NUMBER = re.compile(r"[0-9٠-٩۰-۹]{7,}")
+_DIGIT = "[0-9٠-٩۰-۹]"
+# Seven digits or more, also when written in groups ("+966 55 123 4567"), and passport-like numbers ("AB123456").
+_LONG_NUMBER = re.compile(rf"\+?{_DIGIT}(?:[ \-]?{_DIGIT}){{6,}}|(?<![A-Za-z])[A-Za-z]{{1,2}}{_DIGIT}{{6,9}}")
 YES = {"y", "yes", "1", "نعم", "ن", "بلاغ", "صح"}
 NO = {"n", "no", "0", "لا", "ل", "خطأ", "خطا"}
 
 
 def _fingerprint(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    # The leading letter keeps a spreadsheet from turning the value into a number.
+    return "h" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
+def _cell(text: str) -> str:
+    """Message text as a spreadsheet cell: long numbers masked, one line, and never a formula."""
+    text = _LONG_NUMBER.sub("[رقم]", text).replace("\n", " / ")
+    return "'" + text if text.lstrip()[:1] in ("=", "+", "-", "@") else text
+
+
+def _read_rows(path: Path) -> list[dict]:
+    """The rows of a marked file, however the spreadsheet saved it (encoding, comma or semicolon)."""
+    raw = Path(path).read_bytes()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("cp1256", errors="replace")  # the old Windows Arabic encoding
+    first_line = text.splitlines()[0] if text.strip() else ""
+    delimiter = max(",;\t", key=first_line.count)
+    return list(csv.DictReader(text.splitlines(), delimiter=delimiter))
 
 
 def write_sample(messages, path: Path, size: int = 50, seed: int | None = None) -> int:
@@ -35,8 +56,8 @@ def write_sample(messages, path: Path, size: int = 50, seed: int | None = None) 
         writer = csv.DictWriter(file, fieldnames=COLUMNS)
         writer.writeheader()
         for index in chosen:
-            text = _LONG_NUMBER.sub("[رقم]", messages[index].text).replace("\n", " / ")
-            writer.writerow({"id": index, "text": text, "report": "", "check": _fingerprint(messages[index].text)})
+            text = messages[index].text
+            writer.writerow({"id": index, "text": _cell(text), "report": "", "check": _fingerprint(text)})
     return len(chosen)
 
 
@@ -56,8 +77,7 @@ class Agreement:
 def score(messages, path: Path) -> Agreement:
     """Compares the owner's marks with the rules. Raises ValueError when the file does not fit the export."""
     result = Agreement()
-    with Path(path).open(encoding="utf-8-sig", newline="") as file:
-        rows = list(csv.DictReader(file))
+    rows = _read_rows(path)
     for number, row in enumerate(rows, start=2):  # row 1 is the heading
         try:
             index = int(row["id"])

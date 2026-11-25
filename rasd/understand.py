@@ -355,6 +355,9 @@ def build_report(
     reasons = requirement_reasons(type, hotel, kind, number, name)
     if number is not None and not _number_is_confirmed(message, reading.number_words, number):
         reasons.append("number_not_confirmed")
+    # A hotel the model gives that is not in the message is not kept, and a person looks at the report.
+    if reading.hotel.strip() and not contains_name(message, reading.hotel):
+        reasons.append("hotel_not_confirmed")
     # A risk counts even when its words are not found in the message, because the
     # higher priority is the safe side. But then a person must look at the report.
     if any(not contains_words_in_order(message, quoted[risk]) for risk in risks):

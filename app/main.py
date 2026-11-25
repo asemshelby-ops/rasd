@@ -10,6 +10,7 @@ name, no passport or visa number, no words of a message, no photo.
 """
 
 import json
+import logging
 import os
 import time
 from datetime import datetime, timedelta
@@ -22,15 +23,17 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import copy
-from app.intake import take_in
+from app.intake import listed_hotel, take_in
 from app.store import SAVED_SOURCE, CaseClosed, NoSuchCase, NothingToAnswer, Store
 from demo import scene
 from rasd.askback import ask_back
+from rasd.elm import SimulatedElm
 from rasd.privacy import redact
-from rasd.routing import CHECKLISTS, HOTELS, match_hotel
+from rasd.routing import CHECKLISTS, HOTELS
 from rasd.understand import KEY_VARIABLE
-from rasd.voice import OPENAI_KEY_VARIABLE
+from rasd.voice import OPENAI_KEY_VARIABLE, VoiceError
 
+log = logging.getLogger("rasd")
 HERE = Path(__file__).resolve().parent
 PROJECT_DIR = HERE.parent
 DEFAULT_DB = PROJECT_DIR / "rasd.db"
@@ -112,7 +115,10 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
 
     def receive(text: str, hotel: str, photo: bool, source: str) -> dict:
         """One message becomes a report in a case (app/intake.py), and the sender gets an answer."""
-        report_id, case_id, joined, report = take_in(store, the_engine().read, text, hotel, photo, source, now())
+        def read(safe_text, photo_attached=False):  # the engine is built here, so a failure to build it is caught too
+            return the_engine().read(safe_text, photo_attached=photo_attached)
+
+        report_id, case_id, joined, report = take_in(store, read, text, hotel, photo, source, now())
         return answer_for(report_id, case_id, report, joined)
 
     def hear(audio: bytes, filename: str, hotel: str, source: str):
@@ -122,7 +128,8 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         started = time.perf_counter()
         try:
             heard = the_engine().transcribe(audio, filename)
-        except Exception:  # VoiceError, or anything else: the sender is told to type instead
+        except Exception as e:  # VoiceError, or anything else: the sender is told to type instead
+            log.warning("voice note not written down (%s: %s)", type(e).__name__, e if isinstance(e, VoiceError) else "")
             return problem(503, copy.VOICE_FAILED)
         if not heard.strip():
             return problem(400, copy.EMPTY_MESSAGE)
@@ -137,13 +144,17 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         """Identification: the MOCK card is read, then the simulated Elm lookup is asked. The photo is not kept."""
         if len(image) > MAX_PHOTO_BYTES:
             return problem(413, copy.PHOTO_TOO_LARGE)
+        if not store.is_open_lost_pilgrim(case_id):
+            return problem(409, copy.CARD_ONLY_FOR_LOST)
         try:
-            reading = the_engine().read_card(image, media_type)
-        except Exception:  # a dropped network must not show the sender an error page
+            engine_now = the_engine()
+            reading = engine_now.read_card(image, media_type)
+        except Exception as e:  # a dropped network must not show the sender an error page
+            log.warning("card not read (%s)", type(e).__name__)
             reading = None
         if reading is None:
             return problem(422, copy.CARD_REFUSED)
-        record = the_engine().elm.lookup(reading.full_name, reading.visa_number)
+        record = engine_now.elm.lookup(reading.full_name, reading.visa_number)
         if record is None:
             return problem(404, copy.NOT_IN_LOOKUP)
         try:
@@ -176,18 +187,20 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         }
 
     @app.post("/api/reports")
-    async def send_report(text: str = Form(""), hotel: str = Form(""), pilgrim_photo: UploadFile | None = File(None)):
+    def send_report(text: str = Form(""), hotel: str = Form(""), pilgrim_photo: UploadFile | None = File(None)):
         photo = pilgrim_photo is not None and bool(pilgrim_photo.filename)  # only THAT a photo came is kept
+        if photo and len(pilgrim_photo.file.read(MAX_PHOTO_BYTES + 1)) > MAX_PHOTO_BYTES:
+            return problem(413, copy.PHOTO_TOO_LARGE)
         if not text.strip() and not photo:
             return problem(400, copy.EMPTY_MESSAGE)
         return receive(text, hotel, photo, source="text")
 
     @app.post("/api/voice")
-    async def send_voice(hotel: str = Form(""), audio: UploadFile = File(...)):
-        return hear(await audio.read(), audio.filename or "note", hotel, source="voice")
+    def send_voice(hotel: str = Form(""), audio: UploadFile = File(...)):
+        return hear(audio.file.read(), audio.filename or "note", hotel, source="voice")
 
     @app.post("/api/reports/{report_id}/answer")
-    async def answer_question(report_id: int, reply: str = Form("")):
+    def answer_question(report_id: int, reply: str = Form("")):
         try:
             report, case_id = store.answer_question(report_id, reply, now())
         except NothingToAnswer:
@@ -197,8 +210,8 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         return answer_for(report_id, case_id, report)
 
     @app.post("/api/cases/{case_id}/card")
-    async def show_card(case_id: int, photo: UploadFile = File(...)):
-        return identify(case_id, await photo.read(), photo.content_type or "image/png")
+    def show_card(case_id: int, photo: UploadFile = File(...)):
+        return identify(case_id, photo.file.read(), photo.content_type or "image/png")
 
     # --- what people do to a case ----------------------------------------------------------------
 
@@ -214,28 +227,28 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         return {"ok": True}
 
     @app.post("/api/cases/{case_id}/acknowledge")
-    async def acknowledge(case_id: int, who: str = Form("")):
+    def acknowledge(case_id: int, who: str = Form("")):
         return act(store.acknowledge, case_id, who)
 
     @app.post("/api/cases/{case_id}/close")
-    async def close(case_id: int, who: str = Form("")):
+    def close(case_id: int, who: str = Form("")):
         return act(store.close, case_id, who)
 
     @app.post("/api/cases/{case_id}/confirm")
-    async def confirm(case_id: int, who: str = Form("")):
+    def confirm(case_id: int, who: str = Form("")):
         return act(store.confirm, case_id, who)
 
     @app.get("/api/cases/{case_id}/events")
-    async def events(case_id: int):
+    def events(case_id: int):
         return {"events": store.events(case_id)}
 
     @app.get("/api/cases/{case_id}/replacement")
-    async def replacement(case_id: int):
+    def replacement(case_id: int):
         request = store.replacement(case_id)
         return request if request else problem(404, copy.NOT_FOUND)
 
     @app.get("/cases/{case_id}/replacement", response_class=HTMLResponse)
-    async def replacement_page(request: Request, case_id: int):
+    def replacement_page(request: Request, case_id: int):
         """The replacement request, filled in from the report. Numbers are never shown, only that we hold them."""
         saved = store.replacement(case_id)
         if not saved:
@@ -251,16 +264,16 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
     # --- the board ------------------------------------------------------------------------------------
 
     @app.get("/api/board")
-    async def board_data():
+    def board_data():
         view = board_view()
         return {"cases": view["cases"], "notifications": view["notifications"], "now": view["now"]}
 
     @app.get("/board", response_class=HTMLResponse)
-    async def board_page(request: Request):
+    def board_page(request: Request):
         return page(request, "board.html", **board_view())
 
     @app.get("/board/fragment", response_class=HTMLResponse)
-    async def board_fragment(request: Request):
+    def board_fragment(request: Request):
         return page(request, "board_fragment.html", **board_view())
 
     # --- the Elm view: SIMULATED -------------------------------------------------------------------------
@@ -280,22 +293,27 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         return sorted(store.replacements() + simulated, key=lambda row: row["due_at"])
 
     @app.get("/api/elm")
-    async def elm_data():
+    def elm_data():
         return {"simulated": True, "requests": elm_requests(), "now": now().isoformat()}
 
     @app.get("/elm", response_class=HTMLResponse)
-    async def elm_page(request: Request):
+    def elm_page(request: Request):
         return page(request, "elm.html", requests=elm_requests(), now=now().isoformat())
 
     @app.get("/elm/mockup", response_class=HTMLResponse)
-    async def elm_mockup(request: Request):
+    def elm_mockup(request: Request):
         return page(request, "elm_mockup.html")
 
     @app.post("/simulated-elm/lookup")
     async def simulated_elm_lookup(request: Request):
         """The simulated Elm service on its own address. It answers from invented records only."""
-        body = await request.json()
-        record = the_engine().elm.lookup(str(body.get("name", "")), str(body.get("visa_number", "")))
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            return JSONResponse({"simulated": True, "error": "send a JSON object with name and visa_number"}, status_code=400)
+        record = SimulatedElm().lookup(str(body.get("name", "")), str(body.get("visa_number", "")))
         if record is None:
             return {"simulated": True, "found": False}
         return {
@@ -305,6 +323,18 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
 
     # --- the operator: the replay switch, the saved scene, clearing the board ---------------------------
 
+    def scene_plays(files) -> bool:
+        """True when every saved file is there AND the replay engine can be built from them."""
+        if not all((scene.SCENE_DIR / name).exists() for name in files):
+            return False
+        try:
+            from app.engine import ReplayEngine
+
+            saved = ReplayEngine()
+            return all(words in saved.readings for words in (scene.COUNTER_NOTE, scene.PILGRIM_NOTE))
+        except Exception:
+            return False
+
     def checks() -> list[dict]:
         """What the demo needs, looked at without calling anything outside this laptop."""
         load_dotenv(PROJECT_DIR / ".env")
@@ -312,7 +342,7 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         found = [
             ("claude_key", bool(os.environ.get(KEY_VARIABLE, "").strip()), copy.CHECK_CLAUDE_KEY_OK, copy.CHECK_CLAUDE_KEY_MISSING),
             ("speech_key", bool(os.environ.get(OPENAI_KEY_VARIABLE, "").strip()), copy.CHECK_SPEECH_KEY_OK, copy.CHECK_SPEECH_KEY_MISSING),
-            ("saved_scene", all((scene.SCENE_DIR / name).exists() for name in files), copy.CHECK_SCENE_OK, copy.CHECK_SCENE_MISSING),
+            ("saved_scene", scene_plays(files), copy.CHECK_SCENE_OK, copy.CHECK_SCENE_MISSING),
         ]  # fmt: skip
         return [{"name": name, "ok": ok, "text": good if ok else bad} for name, ok, good, bad in found]
 
@@ -347,24 +377,24 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         return body.get("message") or (copy.MODE_REPLAY if body.get("mode") == "replay" else copy.MODE_LIVE)
 
     @app.get("/api/operator/status")
-    async def operator_status():
+    def operator_status():
         return {"mode": mode(), "last_voice": app.state.last_voice, "checks": checks()}
 
     @app.post("/api/operator/mode")
-    async def operator_mode(mode: str = Form("")):
+    def operator_mode(mode: str = Form("")):
         return set_mode(mode)
 
     @app.post("/api/operator/scene/{step}")
-    async def operator_scene(step: str):
+    def operator_scene(step: str):
         return play(step)
 
     @app.post("/api/operator/reset")
-    async def operator_reset(confirm: str = Form("")):
+    def operator_reset(confirm: str = Form("")):
         return clear(confirm)
 
     # The operator page itself uses plain forms, so it works on any phone browser, with no script.
     @app.get("/operator", response_class=HTMLResponse)
-    async def operator_page(request: Request):
+    def operator_page(request: Request):
         message, app.state.operator_message = app.state.operator_message, None
         return page(
             request, "operator.html", mode=mode(), last_voice=app.state.last_voice, checks=checks(), message=message
@@ -375,33 +405,38 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         return RedirectResponse("/operator", status_code=303)
 
     @app.post("/operator/mode")
-    async def operator_mode_form(mode: str = Form("")):
+    def operator_mode_form(mode: str = Form("")):
         return back_to_operator(set_mode(mode))
 
     @app.post("/operator/scene/{step}")
-    async def operator_scene_form(step: str):
+    def operator_scene_form(step: str):
         return back_to_operator(play(step))
 
     @app.post("/operator/reset")
-    async def operator_reset_form(confirm: str = Form("")):
+    def operator_reset_form(confirm: str = Form("")):
         return back_to_operator(clear(confirm))
 
+    @app.get("/supervisor", response_class=HTMLResponse)
+    def supervisor_page(request: Request):
+        """What waits for the supervisor, with the text of each message (numbers hidden). Not for the big screen."""
+        return page(request, "supervisor.html", waiting=store.waiting(now()))
+
     @app.get("/scenario-card", response_class=HTMLResponse)
-    async def scenario_card(request: Request):
+    def scenario_card(request: Request):
         return page(request, "scenario_card.html", scene=scene)
 
     # --- the other pages ------------------------------------------------------------------------------------
 
     @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request):
+    def index(request: Request):
         return page(request, "index.html", hotels=HOTELS)
 
     @app.get("/report", response_class=HTMLResponse)
-    async def report_page(request: Request, hotel: str = ""):
-        return page(request, "report.html", hotel=match_hotel(hotel) or "", hotels=HOTELS)
+    def report_page(request: Request, hotel: str = ""):
+        return page(request, "report.html", hotel=listed_hotel(hotel) or "", hotels=HOTELS)
 
     @app.post("/report", response_class=HTMLResponse)
-    async def report_plain_form(
+    def report_plain_form(
         request: Request,
         text: str = Form(""),
         hotel: str = Form(""),
@@ -411,7 +446,7 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         """The same page for a phone whose browser runs no script: a plain form, and the answer in the page."""
         photo = pilgrim_photo is not None and bool(pilgrim_photo.filename)
         if audio is not None and audio.filename:
-            result = hear(await audio.read(), audio.filename, hotel, source="voice")
+            result = hear(audio.file.read(), audio.filename, hotel, source="voice")
         elif text.strip() or photo:
             result = receive(text, hotel, photo, source="text")
         else:
@@ -419,12 +454,12 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
         body = json.loads(result.body) if isinstance(result, JSONResponse) else result
         question = body.get("question") or {}
         return page(
-            request, "report.html", hotel=match_hotel(hotel) or "", hotels=HOTELS,
+            request, "report.html", hotel=listed_hotel(hotel) or "", hotels=HOTELS,
             reply=body.get("message"), heard=body.get("heard"), question=question.get("text"),
         )  # fmt: skip
 
     @app.get("/before-after", response_class=HTMLResponse)
-    async def before_after(request: Request):
+    def before_after(request: Request):
         scene = json.loads(BEFORE_AFTER_FILE.read_text(encoding="utf-8")) if BEFORE_AFTER_FILE.exists() else {"messages": [], "cases": []}
         return page(request, "before_after.html", scene=scene)
 

@@ -51,6 +51,13 @@ def main(argv=None) -> int:
         parsed = parse_export(read_export(export), month_first=True if options.month_first else None)
     except (OSError, ValueError) as e:
         return _fail(f"the file could not be read ({type(e).__name__}).")
+    if parsed.unread_lines > len(parsed.messages):
+        return _fail(
+            f"the dates of {parsed.unread_lines} lines could not be read. "
+            "Run it again " + ("without" if options.month_first else "with") + " --month-first."
+        )
+    if parsed.unread_lines:
+        print(f"Warning: {parsed.unread_lines} lines were left out because their dates could not be read.", file=sys.stderr)
     if not parsed.messages:
         return _fail("no WhatsApp messages were found in this file. Export the chat 'without media' and pass the .txt file.")
 
@@ -78,8 +85,12 @@ def main(argv=None) -> int:
         except OSError:
             return _fail("the hotels file could not be read.")
     text = render(count(parsed.messages, hotels=hotels, window_hours=options.window_hours), parsed.notes)
-    print(text)
-    export.with_name(export.stem + ".rasd_counts.txt").write_text(text + "\n", encoding="utf-8")
+    saved = export.with_name(export.stem + ".rasd_counts.txt")
+    saved.write_text(text + "\n", encoding="utf-8")  # saved first: a Windows terminal may fail to show Arabic
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(f"This terminal cannot show Arabic. The counts are saved in: {saved}")
     return 0
 
 

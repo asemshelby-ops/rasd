@@ -97,8 +97,10 @@ def draw_mock_card(path: Path, font_file: str = FONT) -> None:
 
 def main() -> None:
     SCENE_DIR.mkdir(parents=True, exist_ok=True)
-    write_placeholder_tone(SCENE_DIR / COUNTER_FILE, pitch=440.0)
-    write_placeholder_tone(SCENE_DIR / PILGRIM_FILE, pitch=330.0)
+    # A voice file that is already there is left alone: it may be the team's own recording.
+    for name, pitch in ((COUNTER_FILE, 440.0), (PILGRIM_FILE, 330.0)):
+        if not (SCENE_DIR / name).exists():
+            write_placeholder_tone(SCENE_DIR / name, pitch=pitch)
     listed = {
         "note": "Words of the saved voice notes. The sound files are PLACEHOLDER tones until the team records them.",
         "voice_notes": {COUNTER_FILE: COUNTER_NOTE, PILGRIM_FILE: PILGRIM_NOTE},

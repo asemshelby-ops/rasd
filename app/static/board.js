@@ -111,10 +111,13 @@
       body.append("who", who.value.trim());
       fetch("/api/cases/" + button.getAttribute("data-case") + "/" + button.getAttribute("data-action"), { method: "POST", body: body })
         .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
-        .then(function (result) { say(result.ok ? "" : result.data.message); button.disabled = false; refresh(); })
+        .then(function (result) { say(result.ok ? "" : ((result.data && result.data.message) || window.RASD.wrong)); button.disabled = false; refresh(); })
         .catch(function () { say(window.RASD.connectionLost); button.disabled = false; });
     });
-    board.addEventListener("pointerdown", function () { pressing = true; });
+    board.addEventListener("pointerdown", function () {
+      pressing = true;
+      setTimeout(function () { pressing = false; }, 3000); // a finger that never lifts must not stop the board
+    });
     document.addEventListener("pointerup", function () { pressing = false; });
     document.addEventListener("pointercancel", function () { pressing = false; });
     setInterval(refresh, (window.RASD && window.RASD.refreshMs) || 1000);

@@ -22,6 +22,13 @@ TYPE_BUTTONS = {label: code for code, label in TYPES.items() if code not in ("un
 
 _FLOOR_WORDS = {"دور", "الدور", "طابق", "الطابق", "منزل"}
 _ELEVATOR_WORDS = {"مصعد", "المصعد", "اصنصير", "الاصنصير", "اسانسير", "الاسانسير", "لفٹ"}
+_ROOM_WORDS = {"غرفه", "الغرفه", "غرفته", "غرفتها", "روم", "room", "جناح", "الجناح", "رقم", "رقمها", "كمره"}
+# Words that show the sender does not know, or will answer later. Such a reply is not an answer.
+_NOT_AN_ANSWER = {
+    "ما", "مدري", "ماادري", "مادري", "لا", "مو", "مش", "مجهول", "اعرف", "نعرف", "يعرف", "ادري", "ندري",
+    "بعدين", "لحظه", "دقيقه", "دقايق", "اسال", "اسالو", "اقول", "نقول", "المشرف", "شوي", "؟", "?",
+}  # fmt: skip
+_LONGEST_PLACE_NUMBER = 5  # digits: a longer number is a phone or a document, not a room
 _NUMBER_LABELS = {"جواز", "الجواز", "جوازه", "رقم", "تاشيره", "التاشيره", "فيزا", "passport", "visa"}
 
 
@@ -77,17 +84,33 @@ def answer(report: Understanding, question: Question, reply: str, stage: str | N
     return settle(replace(report, asked=True, **changes), stage)
 
 
+def _is_not_an_answer(reply: str) -> bool:
+    return bool(set(normalise(reply).replace("?", " ? ").replace("؟", " ؟ ").split()) & _NOT_AN_ANSWER)
+
+
 def _place_in(reply: str, current_kind: str) -> dict:
-    """The room, floor or elevator a reply gives: {"loc_kind": ..., "loc_number": ...}, or {}."""
-    text = to_western_digits(reply)
-    digits = re.findall(r"[0-9]+", text)
-    number = digits[0] if digits else spoken_number(reply)
-    if not number:
-        return {}
-    words = set(normalise(text).split())
-    if words & _FLOOR_WORDS:
+    """The room, floor or elevator a reply gives: {"loc_kind": ..., "loc_number": ...}, or {}.
+
+    A number counts only when the reply is the number alone, or names the place
+    it belongs to ("غرفة 305", "الدور 3"). "بعد 5 دقايق" is not a room, and a
+    passport or phone number in the reply is taken out first.
+    """
+    text = to_western_digits(redact(reply)[0])
+    words = normalise(text).split()
+    floors, elevators = set(words) & _FLOOR_WORDS, set(words) & _ELEVATOR_WORDS
+    digits = [number for number in re.findall(r"[0-9]+", text) if len(number) <= _LONGEST_PLACE_NUMBER]
+    if digits:
+        only_the_number = len(words) == 1
+        if not (only_the_number or floors or elevators or set(words) & _ROOM_WORDS) or _is_not_an_answer(text):
+            return {}
+        number = digits[0]
+    else:
+        number = spoken_number(reply)
+        if not number:
+            return {}
+    if floors:
         kind = "floor"
-    elif words & _ELEVATOR_WORDS:
+    elif elevators:
         kind = "elevator"
     else:
         kind = current_kind if current_kind in NUMBERED_PLACES else "room"
@@ -95,11 +118,14 @@ def _place_in(reply: str, current_kind: str) -> dict:
 
 
 def _name_in(reply: str) -> str:
-    """The name in a reply, without any passport or visa number typed after it."""
+    """The name in a reply, without any passport or visa number typed after it. "" when the reply is not a name."""
     safe, _ = redact(reply)
     for mark in (PASSPORT_MARK, VISA_MARK, OTHER_MARK):
         safe = safe.replace(mark, " ")
     words = safe.split()
     while words and normalise(words[-1]).lower() in _NUMBER_LABELS:
         words.pop()
-    return " ".join(words)
+    name = " ".join(words)
+    if _is_not_an_answer(name) or not any(character.isalpha() for character in name) or len(words) > 6:
+        return ""
+    return name

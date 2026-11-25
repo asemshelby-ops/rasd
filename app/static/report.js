@@ -2,6 +2,8 @@
 // No framework and no build step.
 (function () {
   "use strict";
+  // A browser too old for this script leaves the page as a plain form, which the server answers itself.
+  if (!window.fetch || !window.FormData) { return; }
   var T = window.RASD;
   var chat = document.getElementById("chat");
   var form = document.getElementById("composer");
@@ -32,8 +34,23 @@
     });
   }
 
-  function show(result, retry) {
-    if (!result.ok) { say(result.data.message); return; }
+  // Sends, and remembers what was sent: when the network fails, "send again" sends the same thing.
+  var resend = document.getElementById("resend");
+  var lastSend = null;
+  resend.textContent = T.resend;
+  function send(url, body, after) {
+    lastSend = function () { send(url, body, after); };
+    resend.hidden = true;
+    post(url, body).then(function (result) {
+      lastSend = null;
+      show(result);
+      if (after) { after(result); }
+    }).catch(function () { say(T.sendFailed); resend.hidden = false; });
+  }
+  resend.addEventListener("click", function () { if (lastSend) { lastSend(); } });
+
+  function show(result) {
+    if (!result.ok) { say((result.data && result.data.message) || T.wrong); return; }
     say("");
     var data = result.data;
     if (data.heard) { bubble(T.heard + ": " + data.heard, true); }
@@ -56,7 +73,7 @@
       body.append("reply", value);
       bubble(value, true);
       box.remove();
-      post("/api/reports/" + data.report_id + "/answer", body).then(show).catch(failed);
+      send("/api/reports/" + data.report_id + "/answer", body);
     }
     if (data.question.options.length) {
       data.question.options.forEach(function (option) {
@@ -79,8 +96,6 @@
     }
     reply.appendChild(box);
   }
-
-  function failed() { say(T.sendFailed); }
 
   // A phone photo is several megabytes: too slow over a hotspot and too large for the card reader.
   // It is made smaller on the phone before it is sent. If that cannot be done, the photo goes as it is.
@@ -115,10 +130,10 @@
     bubble((file ? "📷 " : "") + words, true);
     text.value = "";
     photo.value = "";
-    if (!file) { post("/api/reports", body).then(show).catch(failed); return; }
+    if (!file) { send("/api/reports", body); return; }
     shrink(file, function (small) {
       body.append("pilgrim_photo", small, "photo.jpg");
-      post("/api/reports", body).then(show).catch(failed);
+      send("/api/reports", body);
     });
   });
 
@@ -130,10 +145,9 @@
     shrink(chosen, function (small) {
       var body = new FormData();
       body.append("photo", small, "card.jpg");
-      post("/api/cases/" + lastCase + "/card", body).then(function (result) {
-        show(result);
+      send("/api/cases/" + lastCase + "/card", body, function (result) {
         if (result.ok && result.data.notification) { bubble(result.data.notification, false); }
-      }).catch(failed);
+      });
     });
   });
 
@@ -146,7 +160,7 @@
     body.append("audio", audioFile.files[0]);
     audioFile.value = "";
     bubble("🎤 …", true);
-    post("/api/voice", body).then(show).catch(failed);
+    send("/api/voice", body);
   });
 
   // Voice: a phone browser only lets a page record on a secure connection. When it does not,
@@ -164,19 +178,17 @@
         stream.getTracks().forEach(function (track) { track.stop(); });
         var body = new FormData();
         body.append("hotel", hotel.value);
-        body.append("audio", new Blob(pieces, { type: recorder.mimeType }), "note.webm");
+        // The file is named after what the phone really recorded: iPhones record mp4, others webm or ogg.
+        var kind = recorder.mimeType || "";
+        var ending = kind.indexOf("mp4") >= 0 ? "m4a" : (kind.indexOf("ogg") >= 0 ? "ogg" : "webm");
+        body.append("audio", new Blob(pieces, { type: kind }), "note." + ending);
         recorder = null;
         record.textContent = T.record;
         bubble("🎤 …", true);
-        post("/api/voice", body).then(show).catch(failed);
+        send("/api/voice", body);
       };
       recorder.start();
       record.textContent = T.stopAndSend;
     }).catch(function () { say(T.micBlocked); });
   });
-
-  // Used by the demo panel (stage 4) to send a saved voice note or the mock card.
-  window.rasdShow = show;
-  window.rasdBubble = bubble;
-  window.rasdCase = function () { return lastCase; };
 })();

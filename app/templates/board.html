@@ -22,7 +22,7 @@
 {% block scripts %}
 <script>window.RASD = {{ {
   "nameNeeded": copy.NAME_NEEDED, "connectionLost": copy.CONNECTION_LOST, "newCase": copy.NEW_CASE, "movedTo": copy.MOVED_TO,
-  "refreshMs": refresh_ms
+  "refreshMs": refresh_ms, "wrong": copy.SOMETHING_WRONG
 } | tojson }};</script>
 <script src="/static/board.js"></script>
 {% endblock %}

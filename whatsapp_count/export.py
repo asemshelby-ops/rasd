@@ -20,7 +20,7 @@ _MARKS = re.compile("[\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
 _SPACES = str.maketrans({"\u202f": " ", "\xa0": " "})
 _WESTERN = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
 
-_DATE = r"(\d{1,4})[/.\-](\d{1,2})[/.\-](\d{1,4})"
+_DATE = r"(\d{1,4})[/.\-](\d{1,2})[/.\-](\d{1,4})(?:\s*(?:هـ|ه|AH|AD))?"  # an era mark may follow a Hijri date
 _TIME = r"(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?"
 _HALF = r"(?:\s*(?:([AaPp])\.?\s?[Mm]\.?|(ص|م)\S*))?"  # AM / PM, or ص / م
 _ANDROID = re.compile(rf"^{_DATE}[,،]?\s+{_TIME}{_HALF}\s+-\s+")
@@ -51,6 +51,7 @@ class Message:
 class Parsed:
     messages: list[Message]
     notes: list[str] = field(default_factory=list)  # "date_order_assumed", "hijri_dates"
+    unread_lines: int = 0  # lines that begin like a message but whose date could not be read
 
 
 def read_export(path: Path) -> str:
@@ -131,11 +132,19 @@ def parse_export(text: str, month_first: bool | None = None) -> Parsed:
 
     messages: list[Message] = []
     current: Message | None = None
+    unread = 0
     for line, match in matches:
-        at = when(match) if match else None
-        if at is None:
+        if match is None:
             if current is not None:  # a further line of the message above
                 current.text = f"{current.text}\n{line}" if current.text else line
+            continue
+        at = when(match)
+        if at is None:
+            # It begins like a message but its date is impossible (the day and the month are
+            # probably the other way round). It is counted and left out: it must never be
+            # glued to the message above, because it carries a sender's name.
+            unread += 1
+            current = None
             continue
         current = None
         rest = line[match.end() :]
@@ -152,4 +161,4 @@ def parse_export(text: str, month_first: bool | None = None) -> Parsed:
         messages.append(current)
     for message in messages:
         message.text = message.text.strip()
-    return Parsed(messages, notes)
+    return Parsed(messages, notes, unread)
