@@ -342,9 +342,11 @@ Choices I made while building them:
     November 2026). If the usual merge rules put the report into another open
     case of that hotel, it moves there with its events and private numbers and
     its own card is removed. The window is counted from when the report was
-    sent, not from the tap. My choices: this runs only after the hotel
-    confirmation, not after other answers (a room number, a name); and only
-    for a report that is still a case of its own.
+    sent, not from the tap. The owner then extended it: it also runs after
+    a reply that gives the room or the floor, and not after a reply with only
+    a name. My choices: it runs only for a report that is still a case of its
+    own; a reply to "which hotel?" (the tap on a hotel button) and a reply
+    that picks the type do not run it.
 86. **The PIN** is read from `RASD_PIN` in `.env`. When it is not set a random
     4-digit PIN is made at every start and printed in the laptop's terminal.
     Five wrong tries shut the door for one minute. It is entered once per

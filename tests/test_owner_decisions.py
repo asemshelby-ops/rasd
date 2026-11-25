@@ -376,3 +376,77 @@ def test_what_belonged_to_the_report_moves_with_it(site, tmp_path):
     assert db.execute("select case_id from private_numbers").fetchall() == [(1,)]
     assert db.execute("select count(*) from cases").fetchone()[0] == 1
     assert db.execute("select distinct case_id from reports").fetchall() == [(1,)]
+
+
+# --- the duplicate check also runs again after the sender gives the room or the floor ----------------------
+
+WITH_ROOM = "ما في موية في غرفة 907"
+NO_ROOM_TEXT = "الموية مقطوعة عندنا"
+NO_PLACE = dict(location_kind="room", number_words="", location_number="")
+
+
+def room_case_then_report_without_room(site, minutes_between=5):
+    site.engine.readings[NO_ROOM_TEXT] = reading(**NO_PLACE)
+    send(site, WITH_ROOM)
+    site.clock.now += timedelta(minutes=minutes_between)
+    reply = send(site, NO_ROOM_TEXT)
+    assert reply["question"]["text"] == "ما رقم الغرفة أو الدور؟" and len(cases(site)) == 2
+    return reply
+
+
+def test_a_room_in_the_reply_joins_the_report_to_the_open_case_of_that_room(site):
+    answered = tap(site, room_case_then_report_without_room(site), "907")
+    assert answered["merged"] is True and answered["case_id"] == 1 and answered["message"] == copy.merged(1, 2)
+    (case,) = cases(site)
+    assert case["count_text"] == "بلاغان، حالة واحدة" and case["state"] == "routed"
+
+
+def test_a_floor_in_the_reply_joins_the_open_case_of_that_floor(site):
+    site.engine.readings["الكهرباء طافية في الدور 3"] = reading(type="power_elevator", location_kind="floor", number_words="3", location_number="3")
+    site.engine.readings["الكهرباء طافية"] = reading(type="power_elevator", location_kind="none", number_words="", location_number="")
+    send(site, "الكهرباء طافية في الدور 3")
+    answered = tap(site, send(site, "الكهرباء طافية"), "الدور 3")
+    assert answered["merged"] is True and len(cases(site)) == 1
+
+
+def test_another_room_in_the_reply_stays_its_own_case(site):
+    answered = tap(site, room_case_then_report_without_room(site), "512")
+    assert answered["merged"] is False and len(cases(site)) == 2
+    assert "512" in answered["message"]
+
+
+def test_a_reply_with_no_room_changes_nothing(site):
+    answered = tap(site, room_case_then_report_without_room(site), "مدري")
+    assert answered["merged"] is False and len(cases(site)) == 2
+
+
+def test_the_room_reply_keeps_the_60_minute_window_from_when_the_report_was_sent(site):
+    reply = room_case_then_report_without_room(site, minutes_between=50)
+    site.clock.now += timedelta(minutes=30)  # the tap comes 80 minutes after the first report
+    assert tap(site, reply, "907")["merged"] is True
+
+
+def test_the_room_reply_does_not_join_a_case_older_than_the_window_or_a_closed_one(site):
+    assert tap(site, room_case_then_report_without_room(site, minutes_between=61), "907")["merged"] is False
+    site.post("/api/operator/reset", data={"confirm": "yes"})
+    reply = room_case_then_report_without_room(site)
+    first_case = min(case["id"] for case in cases(site))
+    site.post(f"/api/cases/{first_case}/close", data={"who": "سالم"})
+    assert tap(site, reply, "907")["merged"] is False
+
+
+def test_a_reply_with_only_a_name_does_not_run_the_check_again(site, monkeypatch):
+    from app.store import Store
+
+    calls = []
+    real = Store._join_open_case
+    monkeypatch.setattr(Store, "_join_open_case", lambda self, *args: calls.append(args) or real(self, *args))
+    text = "حاج ضيّع بطاقة نسك في برج السكينة"
+    site.engine.readings[text] = reading(type="nusuk_card", hotel="برج السكينة", location_kind="none", number_words="", location_number="")
+    reply = send(site, text)
+    assert reply["question"]["text"] == "ما اسم الحاج؟"
+    tap(site, reply, "نبيل سعد")
+    assert calls == []
+    site.post("/api/operator/reset", data={"confirm": "yes"})
+    tap(site, room_case_then_report_without_room(site), "907")
+    assert len(calls) == 1  # the room reply does run it

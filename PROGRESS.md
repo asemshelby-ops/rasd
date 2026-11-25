@@ -170,3 +170,5 @@ each stage marked "measure", and at most 3 US dollars of API usage in total.
 - Tests: 878 passed. No API calls, no benchmark run.
 - Then: after "نعم" the duplicate check runs again against open cases
   (QUESTIONS.md 85). Tests: 886 passed. No API calls.
+- Then: the duplicate check also runs again after a reply that gives the room
+  or the floor; a name-only reply does not run it. Tests: 893 passed. No API calls.
