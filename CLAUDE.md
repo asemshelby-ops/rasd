@@ -9,32 +9,65 @@ for students to maintain.
 
 ## Where the work stands
 
-Phase 1, step 1 is done: `data/reports.csv` (35 fictional reports),
-`data/expected.csv` (expected answers), loader, routing table, checks.
+Phase 1, steps 1 to 3 are done and unit-tested, and the step 4 benchmark covers
+everything in its list below. Built: `data/reports.csv` (35 fictional reports),
+`data/expected.csv`, `rasd/understand.py` (understanding function and prompt),
+`rasd/numbers.py` (dialect number parser), `rasd/incidents.py` (duplicate
+merging), `rasd/scoring.py`, `rasd/cost.py`, `benchmark.py`, and the empty
+holdout folder `data/holdout/`.
 
-Step 2 is built and unit-tested, but **the benchmark has never run against the
-model, so there are no accuracy results yet.** On 25 November 2026 the value of
-`RASD_CLAUDE_KEY` in the cloud environment was an 8-character placeholder, not a
-key, and Anthropic answered 401. Built so far: `rasd/understand.py` (the
-understanding function and its prompt), `rasd/numbers.py` (dialect number
-parser), `rasd/scoring.py`, `rasd/cost.py` and `benchmark.py` (accuracy per
-field, Arabic and Urdu split, spoken-room accuracy, wrong reports, cost, time;
-duplicate grouping prints as "not built").
+**Measured on 25 November 2026** with the real key (full reports in
+`comparison/`, and the table in `README.md`):
 
-Next: once the real key is set, run `python benchmark.py`, report the printed
-results exactly, and only then tune the prompt if the results call for it. The
-larger-model comparison has not been run. After that comes step 3.
-Do not start Phase 2 until Phase 1 works and the owner says so.
+- `claude-haiku-5-5`: all fields right on 30 of 35; 1 confident mistake (an
+  urgency, not a place); 0 wrong places that were not sent to the supervisor;
+  spoken room numbers 11 of 13; grouping 32 of 35; about $0.009 per run.
+- `claude-sonnet-5-5`: 35 of 35 on everything; about $0.13 per run.
+- Haiku varies between runs: three runs the same day gave 32, 30 and 30 of 35.
+- Haiku reads the Palestinian word for twelve ("طنعش") as another number
+  (reports 2 and 14). Our parser reads it correctly, so both were flagged.
+- Haiku does not copy Arabic-Indic digits as written into `number_words`
+  (report 21), so that correct report is flagged needlessly.
 
-Step 2 choices that the owner has not confirmed yet:
+**The larger-model comparison has been run (once, 25 November 2026). Do not run
+it again** unless the owner says so in the chat. `benchmark.py --compare`
+refuses while `comparison/answers.json` exists.
+
+**The prompt has not been tuned** since the first real run: the owner has not
+asked for it. Two fixes were proposed and are waiting for the owner's decision:
+a table of dialect words for 11 to 19 in the prompt, and accepting a number
+whose digits appear in the message even when the quote does not match.
+
+The owner has not written the holdout reports yet, so they have no results, and
+the larger model was not measured on them.
+
+Next: the owner's decisions above, then step 5 (speech to text) when the owner
+says so. Do not start Phase 2 until Phase 1 works and the owner says so.
+
+Confirmed by the owner on 25 November 2026:
 
 - Confidence has two levels, `high` and `low`.
-- A room, elevator or floor without its number counts as "location missing".
-- A report the model could not read (API down, refusal, no answer) goes to the
-  supervisor as `unclear` and `urgent`, because nobody has read it yet.
+- A room, elevator or floor without its number counts as "location missing" and
+  goes to the supervisor.
+- A report the system could not understand (API down, refusal, no answer) goes
+  to the supervisor as `unclear` and `urgent`.
+- No refusal fallback to another model: a refusal becomes a flagged report.
+
+Choices that the owner has not confirmed yet:
+
 - The number parser covers Arabic only. A number spoken in Urdu words cannot be
   re-read, so that report is flagged.
-- No refusal fallback to another model: a refusal becomes a flagged report.
+- Merging window: 60 minutes, counted from the incident's latest message
+  (`MERGE_WINDOW_MINUTES` in `rasd/incidents.py`).
+- A report that needs supervisor confirmation for any reason never merges, and
+  nothing merges into it. A common area never merges (we do not know which one).
+- An incident is as urgent as its most urgent message.
+- The benchmark never prints the text of holdout reports, only their numbers
+  with expected and actual values.
+- The benchmark's `--model` option was replaced by `--compare MODEL`, which runs
+  both models on the same reports and saves the record in `comparison/`.
+- The benchmark waits and retries up to 6 times when the API says slow down
+  (the live system keeps 2).
 
 ## How to work
 
@@ -52,7 +85,13 @@ Step 2 choices that the owner has not confirmed yet:
 
 - **Cost.** The Claude credit is $100 prepaid. Print the approximate API cost
   after every benchmark run. Stop if any single run costs more than $1.
-- **Larger-model comparison: run it once only.**
+- **Larger-model comparison: run it once only.** It was run on 25 November 2026.
+- **Holdout.** `data/holdout/reports.csv` and `data/holdout/expected.csv` are
+  written by the owner. Never open, print, search or copy them, including
+  through git (`diff`, `show`, `log -p`), and never load them in unit tests.
+  Only `benchmark.py` reads them, when it runs. Report their results
+  separately from the 35 main reports. Never use what a holdout run shows to
+  add examples to the prompt.
 - **Secrets.** Never ask for a key in chat and never commit one. The Claude key
   is read from the environment variable `RASD_CLAUDE_KEY` (set in the cloud
   environment; on laptops it goes in the git-ignored `.env`). Pass it to the
@@ -72,10 +111,11 @@ Step 2 choices that the owner has not confirmed yet:
 
 - **Stack:** Python for everything. Phase 2 uses FastAPI, one SQLite file and
   plain HTML pages, with no build step.
-- **Model:** `claude-haiku-5-5` by default, with a model option on the
-  benchmark. The single comparison run uses one larger current model
-  (`claude-sonnet-5-5` was the planned choice) and shows the accuracy and cost
-  gap next to Haiku. Use structured output so the reply always parses.
+- **Model:** `claude-haiku-5-5` by default (`DEFAULT_MODEL` in
+  `rasd/understand.py`). `python benchmark.py --compare MODEL` is the single
+  comparison run with one larger current model (`claude-sonnet-5-5` was used):
+  both models read the same reports and the accuracy and cost gap is printed
+  next to Haiku. Use structured output so the reply always parses.
 - **Understanding function** (step 2): input is the report text; output is
   type, location (kind and number), urgency, owner, confidence. The model reads
   the message; owner and deadline come from the tables in `rasd/routing.py`.
@@ -102,6 +142,11 @@ Step 2 choices that the owner has not confirmed yet:
   (5) shown separately, every wrong report listed with expected and actual,
   duplicate-grouping score, measured cost and time. An empty cell in
   `expected.csv` means the field is not scored; `-` means no number expected.
+  The report leads with the confident mistakes: reports that are wrong and were
+  not sent to the supervisor, with wrong places counted on their own. The owner
+  called this the number that matters most for the demo. The main reports and
+  the holdout reports are scored in separate sections. Everyday output goes to
+  `results/` (git-ignored); the one-time comparison is kept in `comparison/`.
 - **Speech to text** (step 5): Claude takes no audio. Use OpenAI
   `gpt-4o-transcribe` (approved, pay-as-you-go, $0.006 per minute) and keep
   free local Whisper as an offline fallback. The benchmark runs both on the

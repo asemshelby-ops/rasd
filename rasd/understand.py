@@ -188,7 +188,7 @@ def _not_understood(error: str, input_tokens: int = 0, output_tokens: int = 0) -
     """The report we give when the model gave no answer: straight to the supervisor.
 
     It is marked urgent because nobody has read it yet, so we cannot rule out
-    an emergency. This is a first judgement that the team may change.
+    an emergency. The owner approved this rule.
     """
     return Understanding(
         type="unclear",
