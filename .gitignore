@@ -1,0 +1,15 @@
+# Secrets: API keys live here and must never be committed
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Benchmark output (regenerated on every run)
+results/
+
+# Phase 2 runtime files
+*.db
+uploads/
