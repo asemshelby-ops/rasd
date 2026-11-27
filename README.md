@@ -348,6 +348,16 @@ python -m pytest
 
 النتيجة المتوقعة: نجاح جميع الفحوص.
 
+فحوص المتصفح (منفصلة عن الفحوص اليومية، في `tests/e2e/`): تفتح صفحة الجوال واللوحة وصفحة التشغيل في متصفح حقيقي، بوضع الإعادة فقط، ولا تخرج من الجهاز. تحتاج تثبيت أدوات التطوير والمتصفح مرة واحدة:
+
+```bash
+pip install -r requirements-dev.txt
+python -m playwright install chromium
+python -m pytest -m e2e -q
+```
+
+الصور تُحفظ في `results/e2e/`.
+
 ### مفتاح Claude
 
 اختبار الدقة يحتاج مفتاح Claude، ويُقرأ من المتغير `RASD_CLAUDE_KEY`.

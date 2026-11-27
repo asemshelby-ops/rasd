@@ -1,0 +1,3 @@
+-r requirements.txt
+# End-to-end browser tests (tests/e2e): after installing, run python -m playwright install chromium
+playwright
