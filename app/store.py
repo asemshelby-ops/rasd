@@ -306,6 +306,8 @@ class Store:
             question = ask_back(report)
             if question is None:
                 raise NothingToAnswer
+            if case_id is not None and self._incident(case_id).closed_at is not None:
+                raise CaseClosed  # a closed case takes nothing more: its record is evidence
             completed = answer(report, question, reply)
             joined = False
             self.db.execute("update reports set report = ? where id = ?", (_report_to_json(completed), report_id))

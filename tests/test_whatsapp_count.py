@@ -6,6 +6,7 @@ aggregates only. No network, no AI model.
 
 import ast
 import csv
+import os
 import subprocess
 import sys
 import zipfile
@@ -355,8 +356,24 @@ def test_the_hand_check_command_writes_the_file_and_then_scores_it(tmp_path, cap
     assert "100%" in capsys.readouterr().out
 
 
+def test_scoring_on_a_terminal_that_cannot_show_arabic_saves_the_result_and_says_where(tmp_path):
+    export = tmp_path / "group.txt"
+    export.write_text(iphone(), encoding="utf-8")
+    assert main([str(export), "--hand-check"]) == 0
+    command = [sys.executable, "-m", "whatsapp_count", str(export), "--score", str(tmp_path / "group.rasd_hand_check.csv")]
+    plain_terminal = {**os.environ, "PYTHONIOENCODING": "cp1252", "PYTHONUTF8": "0"}
+    result = subprocess.run(command, cwd=REPO, env=plain_terminal, capture_output=True, text=True, encoding="cp1252", errors="replace")
+    assert result.returncode == 0, result.stderr
+    saved = tmp_path / "group.rasd_agreement.txt"
+    assert str(saved) in result.stdout
+    assert "report" in saved.read_text(encoding="utf-8")  # nothing marked yet: the saved text says to fill the report column
+
+
 def test_exports_and_what_is_made_from_them_are_ignored_by_git():
-    names = ["WhatsApp Chat with Group.txt", "WhatsApp Chat - Group.zip", "_chat.txt", "x/group.rasd_counts.txt", "group.rasd_hand_check.csv"]
+    names = [
+        "WhatsApp Chat with Group.txt", "WhatsApp Chat - Group.zip", "_chat.txt", "x/group.rasd_counts.txt", "group.rasd_hand_check.csv",
+        "group.rasd_agreement.txt",
+    ]  # fmt: skip
     for name in names:
         result = subprocess.run(["git", "check-ignore", "-q", name], cwd=REPO)
         assert result.returncode == 0, f"{name} is not ignored"

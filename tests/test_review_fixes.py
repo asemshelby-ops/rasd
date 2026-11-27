@@ -20,7 +20,7 @@ from rasd.cards import CardReading
 from rasd.elm import SimulatedElm
 from rasd.incidents import group_reports
 from rasd.privacy import redact
-from rasd.understand import Reading, build_report
+from rasd.understand import Reading, Understanding, build_report
 from rasd.voice import FirstThatWorks, VoiceError
 
 HOTEL = "برج السكينة"
@@ -116,6 +116,56 @@ def test_with_no_claude_key_a_report_is_still_saved_and_goes_to_the_supervisor(t
     assert reply.status_code == 200 and copy.SENT_TO_SUPERVISOR in reply.json()["message"]
     assert site.get("/api/board").json()["cases"][0]["state"] == "waiting"
     assert site.post("/report", data={"text": "ما في موية في غرفة 907", "hotel": HOTEL}).status_code == 200
+
+
+def test_reading_the_pin_takes_only_the_pin_from_the_env_file(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("RASD_PIN=5173\nRASD_CLAUDE_KEY=made-up-test-key\n", encoding="utf-8")
+    monkeypatch.setattr(main, "PROJECT_DIR", tmp_path)
+    monkeypatch.delenv("RASD_PIN", raising=False)
+    monkeypatch.delenv("RASD_CLAUDE_KEY", raising=False)
+    assert main.pin_for_this_run() == "5173"
+    leaked = "RASD_CLAUDE_KEY" in main.os.environ or "RASD_PIN" in main.os.environ  # a bool: a failure never prints the environment
+    assert not leaked
+
+
+def test_the_operator_check_sees_the_key_in_the_env_file_without_putting_it_into_the_environment(site, tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("RASD_CLAUDE_KEY=made-up-test-key\n", encoding="utf-8")
+    monkeypatch.setattr(main, "PROJECT_DIR", tmp_path)
+    monkeypatch.delenv("RASD_CLAUDE_KEY", raising=False)
+    found = {check["name"]: check["ok"] for check in site.get("/api/operator/status").json()["checks"]}
+    assert found["claude_key"] is True
+    leaked = "RASD_CLAUDE_KEY" in main.os.environ  # a bool: a failure never prints the environment
+    assert not leaked
+
+
+# --- a reply that comes after its case was closed (review of 27 November 2026) ----------------------------
+
+
+def test_a_reply_after_the_case_is_closed_is_refused_and_the_closed_case_stays_as_it_was(tmp_path):
+    site = TestClient(create_app(db_path=tmp_path / "rasd.db"))
+    store = site.app.state.store
+
+    def ac_report(hotel, reasons=()):
+        return Understanding(
+            type="ac", loc_kind="room", loc_number="305", urgency="urgent", owner="maintenance", deadline_minutes=15,
+            confidence="high", needs_confirmation=bool(reasons), reasons=reasons, hotel=hotel,
+        )  # fmt: skip
+
+    start = datetime(2026, 12, 23, 10, 0)
+    store.add_report(ac_report(HOTEL), start, None, "text", "a")
+    near_name, closed, _ = store.add_report(ac_report("برج السكينا", ("hotel_near_match",)), start + timedelta(minutes=5), None, "text", "b")
+    store.close(closed, "موظف التجربة", start + timedelta(minutes=10))
+
+    def record():
+        return [
+            [tuple(row) for row in store.db.execute(f"select * from {table} where case_id = ? order by 1, 2", (closed,))]
+            for table in ("steps", "events", "reports")
+        ]
+
+    before = record()
+    reply = site.post(f"/api/reports/{near_name}/answer", data={"reply": "نعم"})
+    assert reply.status_code == 409 and reply.json()["message"] == copy.ALREADY_CLOSED
+    assert record() == before and before[0]  # the steps of the closed case are all still there
 
 
 def test_the_operator_check_says_so_when_the_saved_scene_cannot_be_played(site, monkeypatch):

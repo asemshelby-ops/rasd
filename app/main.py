@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -70,8 +70,9 @@ PIN_LOCK_SECONDS = 60
 
 
 def pin_for_this_run() -> str:
-    load_dotenv(PROJECT_DIR / ".env")
-    pin = to_western_digits(os.environ.get(PIN_VARIABLE, "")).strip()
+    # Only the PIN is read from .env: loading the whole file would put the Claude key into the environment.
+    pin = os.environ.get(PIN_VARIABLE) or dotenv_values(PROJECT_DIR / ".env").get(PIN_VARIABLE) or ""
+    pin = to_western_digits(pin).strip()
     if not pin:
         pin = f"{secrets.randbelow(10000):04d}"
         print(f"PIN for the operator and supervisor pages (set {PIN_VARIABLE} in .env to choose your own): {pin}")
@@ -288,6 +289,8 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
             report, case_id, joined = store.answer_question(report_id, reply, now())
         except NothingToAnswer:
             return problem(409, copy.ALREADY_ANSWERED)
+        except CaseClosed:
+            return problem(409, copy.ALREADY_CLOSED)
         except NoSuchCase:
             return problem(404, copy.NOT_FOUND)
         return answer_for(report_id, case_id, report, joined)
@@ -435,11 +438,15 @@ def create_app(engine=None, db_path: Path = DEFAULT_DB, now=datetime.now, replay
 
     def checks() -> list[dict]:
         """What the demo needs, looked at without calling anything outside this laptop."""
-        load_dotenv(PROJECT_DIR / ".env")
+        saved = dotenv_values(PROJECT_DIR / ".env")  # read, not loaded: the key must not enter the environment here
+
+        def is_set(name: str) -> bool:
+            return bool((os.environ.get(name) or saved.get(name) or "").strip())
+
         files = (scene.COUNTER_FILE, scene.PILGRIM_FILE, scene.CARD_FILE, "transcripts.json", "saved_readings.json")
         found = [
-            ("claude_key", bool(os.environ.get(KEY_VARIABLE, "").strip()), copy.CHECK_CLAUDE_KEY_OK, copy.CHECK_CLAUDE_KEY_MISSING),
-            ("speech_key", bool(os.environ.get(OPENAI_KEY_VARIABLE, "").strip()), copy.CHECK_SPEECH_KEY_OK, copy.CHECK_SPEECH_KEY_MISSING),
+            ("claude_key", is_set(KEY_VARIABLE), copy.CHECK_CLAUDE_KEY_OK, copy.CHECK_CLAUDE_KEY_MISSING),
+            ("speech_key", is_set(OPENAI_KEY_VARIABLE), copy.CHECK_SPEECH_KEY_OK, copy.CHECK_SPEECH_KEY_MISSING),
             ("saved_scene", scene_plays(files), copy.CHECK_SCENE_OK, copy.CHECK_SCENE_MISSING),
         ]  # fmt: skip
         return [{"name": name, "ok": ok, "text": good if ok else bad} for name, ok, good, bad in found]

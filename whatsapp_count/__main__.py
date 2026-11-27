@@ -66,7 +66,13 @@ def main(argv=None) -> int:
             result = score(parsed.messages, Path(options.score))
         except (OSError, ValueError) as e:
             return _fail(str(e) if isinstance(e, ValueError) else "the hand-check file could not be read.")
-        print(render_agreement(result))
+        text = render_agreement(result)
+        saved = export.with_name(export.stem + ".rasd_agreement.txt")
+        saved.write_text(text + "\n", encoding="utf-8")  # saved first: a Windows terminal may fail to show Arabic
+        try:
+            print(text)
+        except UnicodeEncodeError:
+            print(f"This terminal cannot show Arabic. The result is saved in: {saved}")
         return 0
 
     if options.hand_check:

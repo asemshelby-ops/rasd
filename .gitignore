@@ -24,6 +24,7 @@ _chat.txt
 *_chat.txt
 *.rasd_counts.txt
 *.rasd_hand_check.csv
+*.rasd_agreement.txt
 
 # The server's messages, written by Start-Rasd.bat on every run
 server-log.txt

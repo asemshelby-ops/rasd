@@ -75,7 +75,7 @@ python -m whatsapp_count "C:\rasd-private\group.txt" --hand-check
 python -m whatsapp_count "C:\rasd-private\group.txt" --score "C:\rasd-private\group.rasd_hand_check.csv"
 ```
 
-يطبع الأمر نسبة التوافق، وعدد ما قلتم إنه بلاغ ولم تلتقطه القواعد، وعدد العكس. الملف لا يعرض حكم الأداة، حتى لا يؤثر في حكمكم.
+يطبع الأمر نسبة التوافق، وعدد ما قلتم إنه بلاغ ولم تلتقطه القواعد، وعدد العكس، ويحفظ نسخة منها بجانب ملف التصدير باسم ينتهي بـ `.rasd_agreement.txt`. الملف لا يعرض حكم الأداة، حتى لا يؤثر في حكمكم.
 
 ## حدود معروفة
 

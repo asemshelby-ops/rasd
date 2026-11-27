@@ -224,7 +224,7 @@ def test_the_pin_never_goes_only_after_the_page_is_open_elsewhere(locked, tmp_pa
 
 def test_with_no_pin_set_a_random_one_is_made_and_the_pages_stay_locked(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("RASD_PIN", raising=False)
-    monkeypatch.setattr("app.main.load_dotenv", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.dotenv_values", lambda *a, **k: {})
     site = make_site(tmp_path)
     assert copy.PIN_TITLE in site.get("/operator", follow_redirects=True).text
     pin = site.app.state.pin
